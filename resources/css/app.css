@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Smooth UI & Smooth Modal Popup Animations */
+
+:root {
+    --primary-gradient: linear-gradient(135deg, #47b9f8 0%, #3b6bff 100%);
+    --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+    --card-shadow-hover: 0 15px 35px rgba(59, 107, 255, 0.12);
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f4f7fc !important;
+    color: #2d3748;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Smooth Fade & Zoom Scale Modal Animation */
+.modal.fade .modal-dialog {
+    transform: scale(0.92) translateY(-20px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease-out;
+    opacity: 0;
+}
+
+.modal.show .modal-dialog {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.modal-content {
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12) !important;
+    overflow: hidden;
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+    padding: 1.25rem 1.5rem !important;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0,0,0,0.05) !important;
+    padding: 1rem 1.5rem !important;
+}
+
+/* Glassmorphism & Modern Card Styling */
+.card {
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--card-shadow) !important;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--card-shadow-hover) !important;
+}
+
+/* Modern Form Controls */
+.form-control, .form-select {
+    border-radius: 10px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    padding: 0.6rem 0.9rem !important;
+    font-size: 0.92rem !important;
+    transition: all 0.2s ease !important;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #47b9f8 !important;
+    box-shadow: 0 0 0 4px rgba(71, 185, 248, 0.15) !important;
+}
+
+/* Button Micro-interactions */
+.btn {
+    border-radius: 10px !important;
+    padding: 0.55rem 1.25rem !important;
+    font-weight: 500 !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-primary {
+    background: #3b6bff !important;
+    border-color: #3b6bff !important;
+}
+
+.btn-primary:hover {
+    background: #2552e0 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(59, 107, 255, 0.3) !important;
+}
+
+/* Ultra Thin Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ============================================================ */
+/* DARK MODE THEME STYLING                                      */
+/* ============================================================ */
+body.dark-mode {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
+}
+
+body.dark-mode .card,
+body.dark-mode .modal-content,
+body.dark-mode .top-header,
+body.dark-mode .sidebar,
+body.dark-mode .sidebar__header,
+body.dark-mode .bg-white,
+body.dark-mode .list-group-item {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode .list-group-item h6,
+body.dark-mode .list-group-item div {
+    color: #f8fafc !important;
+}
+
+body.dark-mode .btn-light,
+body.dark-mode .btn-white {
+    background-color: #334155 !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+}
+
+body.dark-mode .btn-light i,
+body.dark-mode .hamburger {
+    color: #f8fafc !important;
+}
+
+body.dark-mode .btn-outline-secondary {
+    border-color: #475569 !important;
+    color: #cbd5e1 !important;
+}
+
+body.dark-mode .btn-outline-secondary:hover {
+    background-color: #334155 !important;
+    color: #ffffff !important;
+}
+
+body.dark-mode .table {
+    color: #cbd5e1 !important;
+}
+
+body.dark-mode .table td,
+body.dark-mode .table th,
+body.dark-mode .table thead,
+body.dark-mode .table thead th {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode .table-hover tbody tr:hover {
+    background-color: #334155 !important;
+    color: #ffffff !important;
+}
+
+body.dark-mode .form-control,
+body.dark-mode .form-select,
+body.dark-mode .input-group-text {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode input::placeholder,
+body.dark-mode textarea::placeholder,
+body.dark-mode .form-control::placeholder,
+body.dark-mode ::placeholder {
+    color: #94a3b8 !important;
+    opacity: 1 !important;
+}
+
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus {
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    border-color: #38bdf8 !important;
+}
+
+body.dark-mode .page-link {
+    background-color: #1e293b !important;
+    color: #cbd5e1 !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode .page-item.active .page-link {
+    background-color: #3b6bff !important;
+    color: #ffffff !important;
+    border-color: #3b6bff !important;
+}
+
+body.dark-mode .page-item.disabled .page-link {
+    background-color: #0f172a !important;
+    color: #64748b !important;
+}
+
+body.dark-mode .text-dark {
+    color: #f1f5f9 !important;
+}
+
+body.dark-mode .text-muted {
+    color: #94a3b8 !important;
+}
+
+body.dark-mode .text-secondary {
+    color: #cbd5e1 !important;
+}
+
+body.dark-mode .bg-light,
+body.dark-mode .thead-light,
+body.dark-mode .bg-light-subtle {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+}
+
+body.dark-mode .sidebar__link {
+    color: #cbd5e1;
+}
+
+body.dark-mode .sidebar__link:hover {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+}
+
+/* Invert Logo & Filter Icon in Dark Mode */
+body.dark-mode .sidebar__logo img {
+    filter: brightness(0) invert(1);
+}
+
+/* Fix Fixed Top Header Overlap */
+.content {
+    margin-top: 15px !important;
+}
+
+/* Print Thermal Receipt Only Rule */
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+    #printableReceipt, #printableReceipt * {
+        visibility: visible !important;
+    }
+    #printableReceipt {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 76mm !important;
+        margin: 0 !important;
+        padding: 5px !important;
+        background: #fff !important;
+        color: #000 !important;
+    }
+    .modal-backdrop, .modal-footer, button, .top-header, .sidebar {
+        display: none !important;
+    }
+}
