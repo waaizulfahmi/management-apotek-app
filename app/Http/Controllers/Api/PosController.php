@@ -26,9 +26,39 @@ class PosController extends Controller
             ->where('is_active', true)
             ->get();
 
+        $prescriptions = DB::table('prescriptions')
+            ->leftJoin('customers', 'prescriptions.customer_id', '=', 'customers.id')
+            ->leftJoin('doctors', 'prescriptions.doctor_id', '=', 'doctors.id')
+            ->select(
+                'prescriptions.*',
+                'customers.name as patient_name',
+                'doctors.name as doctor_name'
+            )
+            ->whereIn('prescriptions.status', ['created', 'verified'])
+            ->orderBy('prescriptions.id', 'desc')
+            ->get();
+
+        foreach ($prescriptions as $rx) {
+            $rx->items = DB::table('prescription_items')
+                ->join('obats', 'prescription_items.medicine_id', '=', 'obats.kode')
+                ->select(
+                    'prescription_items.*',
+                    'obats.nama as medicine_name',
+                    'obats.harga as unit_price',
+                    'obats.stok as stock',
+                    'obats.jenis_obat as unit'
+                )
+                ->where('prescription_items.prescription_id', $rx->id)
+                ->get();
+        }
+
+        $masterShifts = \App\Models\MasterShift::where('is_active', true)->orderBy('start_time', 'asc')->get();
+
         return Inertia::render('Pos/Index', [
             'medicines' => $medicines,
             'customers' => $customers,
+            'prescriptions' => $prescriptions,
+            'masterShifts' => $masterShifts,
         ]);
     }
 
@@ -42,6 +72,7 @@ class PosController extends Controller
             'items.*.kode' => 'required|exists:obats,kode',
             'items.*.quantity' => 'required|integer|min:1',
             'customer_id' => 'nullable|exists:customers,id',
+            'prescription_id' => 'nullable|exists:prescriptions,id',
             'discount' => 'nullable|numeric|min:0',
             'tax' => 'nullable|numeric|min:0',
             'payment_method' => 'required|in:cash,debit,credit,qris,transfer,e-wallet,mixed',
@@ -52,6 +83,13 @@ class PosController extends Controller
         try {
             $invoiceNumber = 'INV-' . date('YmdHis') . '-' . rand(100, 999);
             $cashierId = auth()->id();
+
+            // Validate active shift for cashier
+            $shiftService = new \App\Services\ShiftService();
+            $activeShift = $shiftService->getActiveShift($cashierId);
+            if (!$activeShift) {
+                throw new Exception("Shift belum dibuka. Silakan buka shift terlebih dahulu.");
+            }
 
             $subtotal = 0;
             $itemsToInsert = [];
@@ -93,11 +131,14 @@ class PosController extends Controller
 
             $changeAmount = $request->paid_amount - $grandTotal;
 
-            // Insert Sale Record
+            // Insert Sale Record with shift_id & outlet_id
             $saleId = DB::table('sales')->insertGetId([
                 'invoice_number' => $invoiceNumber,
                 'cashier_id' => $cashierId,
+                'shift_id' => $activeShift->id,
+                'outlet_id' => $activeShift->outlet_id,
                 'customer_id' => $request->customer_id,
+                'prescription_id' => $request->prescription_id ?: null,
                 'sale_date' => now()->toDateString(),
                 'subtotal' => $subtotal,
                 'discount' => $discount,
@@ -111,6 +152,17 @@ class PosController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Update prescription status to dispensed if linked
+            if ($request->prescription_id) {
+                DB::table('prescriptions')->where('id', $request->prescription_id)->update([
+                    'status' => 'dispensed',
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Update Shift metrics (recalculate cash sales / non-cash sales)
+            $shiftService->recalculateShiftMetrics($activeShift->id);
 
             // Insert Sale Items
             foreach ($itemsToInsert as &$saleItem) {

@@ -1,7 +1,7 @@
 <script setup>
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 import { ref } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, Link } from '@inertiajs/vue3';
 
 const props = defineProps({
     sales: Array,
@@ -91,6 +91,7 @@ const printReport = () => {
                                 <th>Tanggal Penjualan</th>
                                 <th>Metode Bayar</th>
                                 <th class="text-end">Total Penjualan</th>
+                                <th class="text-center">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -101,9 +102,14 @@ const printReport = () => {
                                 <td>{{ s.sale_date }}</td>
                                 <td><span class="badge bg-info text-dark">{{ s.payment_method.toUpperCase() }}</span></td>
                                 <td class="text-end fw-bold">{{ formatCurrency(s.grand_total) }}</td>
+                                <td class="text-center">
+                                    <Link :href="route('returns.create', { type: 'sale', reference_id: s.id })" class="btn btn-sm btn-outline-danger">
+                                        RETUR
+                                    </Link>
+                                </td>
                             </tr>
                             <tr v-if="!sales || sales.length === 0">
-                                <td colspan="6" class="text-center py-4 text-muted">Tidak ada data penjualan pada rentang tanggal ini.</td>
+                                <td colspan="7" class="text-center py-4 text-muted">Tidak ada data penjualan pada rentang tanggal ini.</td>
                             </tr>
                         </tbody>
                     </table>

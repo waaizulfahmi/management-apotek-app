@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Voucher extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'code',
@@ -22,6 +23,7 @@ class Voucher extends Model
         'usage_limit_per_member',
         'applicable_tier',
         'is_active',
+        'deleted_by',
     ];
 
     protected $casts = [
@@ -34,6 +36,11 @@ class Voucher extends Model
         'usage_limit_per_member' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by')->withTrashed();
+    }
 
     public function usages()
     {

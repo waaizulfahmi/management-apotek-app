@@ -399,4 +399,89 @@ class PurchaseOrderController extends Controller
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
+    /**
+     * Display PO Detail Page
+     */
+    public function show($id)
+    {
+        $po = DB::table('purchase_orders')
+            ->join('suppliers', 'purchase_orders.supplier_id', '=', 'suppliers.id')
+            ->join('users as creator', 'purchase_orders.created_by', '=', 'creator.id')
+            ->leftJoin('users as approver', 'purchase_orders.approved_by', '=', 'approver.id')
+            ->select(
+                'purchase_orders.*',
+                'suppliers.name as supplier_name',
+                'suppliers.code as supplier_code',
+                'suppliers.phone as supplier_phone',
+                'suppliers.email as supplier_email',
+                'suppliers.address as supplier_address',
+                'creator.name as created_by_name',
+                'approver.name as approved_by_name'
+            )
+            ->where('purchase_orders.id', $id)
+            ->first();
+
+        if (!$po) abort(404);
+
+        $items = DB::table('purchase_order_items')
+            ->join('obats', 'purchase_order_items.medicine_id', '=', 'obats.kode')
+            ->select(
+                'purchase_order_items.*',
+                'obats.nama as medicine_name',
+                'obats.jenis_obat as medicine_unit',
+                'obats.kategori as medicine_category'
+            )
+            ->where('purchase_order_items.purchase_order_id', $id)
+            ->get();
+
+        $receipts = DB::table('purchase_receipts')
+            ->join('users', 'purchase_receipts.received_by', '=', 'users.id')
+            ->select('purchase_receipts.*', 'users.name as received_by_name')
+            ->where('purchase_receipts.purchase_order_id', $id)
+            ->get();
+
+        foreach ($receipts as $r) {
+            $r->items = DB::table('purchase_receipt_items')
+                ->join('obats', 'purchase_receipt_items.medicine_id', '=', 'obats.kode')
+                ->select('purchase_receipt_items.*', 'obats.nama as medicine_name')
+                ->where('purchase_receipt_items.purchase_receipt_id', $r->id)
+                ->get();
+        }
+
+        return Inertia::render('Purchases/PO/Show', [
+            'po' => $po,
+            'items' => $items,
+            'receipts' => $receipts,
+        ]);
+    }
+
+    /**
+     * Approve Purchase Order
+     */
+    public function approve($id)
+    {
+        DB::table('purchase_orders')->where('id', $id)->update([
+            'status' => 'APPROVED',
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Purchase Order berhasil disetujui!');
+    }
+
+    /**
+     * Cancel Purchase Order
+     */
+    public function cancel($id)
+    {
+        DB::table('purchase_orders')->where('id', $id)->update([
+            'status' => 'CANCELLED',
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Purchase Order telah dibatalkan.');
+    }
 }
+

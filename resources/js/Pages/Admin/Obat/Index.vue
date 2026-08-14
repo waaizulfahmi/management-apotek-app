@@ -7,6 +7,7 @@ import { showConfirm } from '@/Utils/swal';
 
 const props = defineProps({
     obats: Object,
+    suppliers: Array,
     filters: Object,
 });
 
@@ -30,6 +31,9 @@ const createForm = useForm({
     harga: 0,
     stok: 0,
     min_stok: 10,
+    supplier_id: '',
+    supplier_name: '',
+    merk: '',
 });
 
 const submitCreate = () => {
@@ -55,6 +59,9 @@ const editForm = useForm({
     harga: 0,
     stok: 0,
     min_stok: 10,
+    supplier_id: '',
+    supplier_name: '',
+    merk: '',
 });
 
 const openEditModal = (obat) => {
@@ -65,6 +72,9 @@ const openEditModal = (obat) => {
     editForm.harga = obat.harga;
     editForm.stok = obat.stok;
     editForm.min_stok = obat.min_stok || 10;
+    editForm.supplier_id = obat.supplier_id || '';
+    editForm.supplier_name = obat.supplier_name || '';
+    editForm.merk = obat.merk || '';
     editForm.gambar = null;
 
     const modalEl = document.getElementById('editObatModal');
@@ -134,7 +144,13 @@ const formatCurrency = (val) => {
                                     <img :src="`/Assets/Obat/${obat.gambar}`" @error="(e) => e.target.src = '/Assets/img/default-medicine.png'" alt="gambar obat" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;">
                                 </td>
                                 <td class="fw-bold text-primary">{{ obat.kode }}</td>
-                                <td class="fw-bold text-dark">{{ obat.nama }}</td>
+                                <td>
+                                    <div class="fw-bold text-dark fs-6">{{ obat.nama }}</div>
+                                    <small class="text-muted d-block">
+                                        <i class="bx bx-store me-1 text-primary"></i>{{ obat.supplier_name || obat.supplier?.name || 'Tanpa Supplier' }}
+                                        <span v-if="obat.merk" class="badge bg-light text-dark border ms-1">Merk: {{ obat.merk }}</span>
+                                    </small>
+                                </td>
                                 <td>
                                     <span class="fw-bold fs-6" :class="obat.stok <= (obat.min_stok || 10) ? 'text-danger' : 'text-success'">
                                         {{ obat.stok }}
@@ -156,7 +172,7 @@ const formatCurrency = (val) => {
                                 </td>
                             </tr>
                             <tr v-if="!obats.data || obats.data.length === 0">
-                                <td colspan="8" class="text-center py-4 text-muted">Tidak ada data obat.</td>
+                                <td colspan="9" class="text-center py-4 text-muted">Tidak ada data obat.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -194,9 +210,22 @@ const formatCurrency = (val) => {
                                     </button>
                                 </div>
                             </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">Nama Obat</label>
+                                    <input type="text" class="form-control" v-model="createForm.nama" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Merk / Pabrik</label>
+                                    <input type="text" class="form-control" v-model="createForm.merk" placeholder="Contoh: Kalbe, Sanbe, Generic">
+                                </div>
+                            </div>
                             <div class="mb-3">
-                                <label class="form-label">Nama Obat</label>
-                                <input type="text" class="form-control" v-model="createForm.nama" required>
+                                <label class="form-label">Supplier / PBF Penyuplai</label>
+                                <select class="form-select" v-model="createForm.supplier_id">
+                                    <option value="">-- Tanpa Supplier / Pilih Supplier --</option>
+                                    <option v-for="sup in suppliers" :key="sup.id" :value="sup.id">{{ sup.name }} ({{ sup.code }})</option>
+                                </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Gambar Obat</label>
@@ -253,9 +282,22 @@ const formatCurrency = (val) => {
                     </div>
                     <form @submit.prevent="submitEdit">
                         <div class="modal-body">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">Nama Obat</label>
+                                    <input type="text" class="form-control" v-model="editForm.nama" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Merk / Pabrik</label>
+                                    <input type="text" class="form-control" v-model="editForm.merk" placeholder="Contoh: Kalbe, Sanbe, Generic">
+                                </div>
+                            </div>
                             <div class="mb-3">
-                                <label class="form-label">Nama Obat</label>
-                                <input type="text" class="form-control" v-model="editForm.nama" required>
+                                <label class="form-label">Supplier / PBF Penyuplai</label>
+                                <select class="form-select" v-model="editForm.supplier_id">
+                                    <option value="">-- Tanpa Supplier / Pilih Supplier --</option>
+                                    <option v-for="sup in suppliers" :key="sup.id" :value="sup.id">{{ sup.name }} ({{ sup.code }})</option>
+                                </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Gambar Obat (Biarkan kosong jika tidak diubah)</label>

@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable, HasRoles, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -25,6 +26,7 @@ class User extends Authenticatable
         'last_login_ip',
         'failed_login_attempts',
         'locked_until',
+        'deleted_by',
     ];
 
     protected $hidden = [
@@ -41,6 +43,11 @@ class User extends Authenticatable
             'locked_until' => 'datetime',
             'failed_login_attempts' => 'integer',
         ];
+    }
+
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     public function transaksis()

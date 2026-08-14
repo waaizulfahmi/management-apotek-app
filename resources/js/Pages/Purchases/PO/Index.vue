@@ -142,16 +142,15 @@ const formatCurrency = (val) => {
                                 </td>
                                 <td>{{ po.created_by_name }}</td>
                                 <td class="text-center">
-                                    <template v-if="po.status === 'APPROVED' || po.status === 'SENT' || po.status === 'PARTIAL_RECEIVED'">
-                                        <Link :href="route('purchases.po.receive', po.id)" class="btn btn-sm btn-success fw-bold">
-                                            <i class="bx bx-package"></i> Terima Barang
-                                        </Link>
-                                    </template>
-                                    <template v-else>
-                                        <button class="btn btn-sm btn-outline-secondary">
+                                    <div class="d-flex justify-content-center gap-1">
+                                        <Link :href="route('purchases.po.show', po.id)" class="btn btn-sm btn-outline-primary fw-semibold">
                                             <i class="bx bx-show"></i> Detail
-                                        </button>
-                                    </template>
+                                        </Link>
+                                        <Link v-if="po.status === 'APPROVED' || po.status === 'SENT' || po.status === 'PARTIAL_RECEIVED'"
+                                            :href="route('purchases.po.receive', po.id)" class="btn btn-sm btn-success fw-bold">
+                                            <i class="bx bx-package"></i> Terima
+                                        </Link>
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-if="!orders.data || orders.data.length === 0">

@@ -246,6 +246,120 @@ body.dark-mode .sidebar__logo img {
     filter: brightness(0) invert(1);
 }
 
+/* ============================================================ */
+/* WARNING / AMBER ALERT STYLES (Light & Dark Compatible)      */
+/* ============================================================ */
+.alert-warning-custom,
+.alert-warning {
+    background-color: #fffbeb !important;
+    border: 1px solid #fde68a !important;
+    border-left: 5px solid #f59e0b !important;
+    border-radius: 12px !important;
+    color: #78350f !important;
+}
+
+.alert-warning-custom .alert-warning-title,
+.alert-warning-custom strong,
+.alert-warning .text-dark,
+.alert-warning strong {
+    color: #78350f !important;
+}
+
+.alert-warning-custom .alert-warning-text,
+.alert-warning-custom small,
+.alert-warning-custom p,
+.alert-warning small,
+.alert-warning p,
+.alert-warning .text-muted {
+    color: #92400e !important;
+}
+
+.alert-warning-custom i,
+.alert-warning i {
+    color: #d97706 !important;
+}
+
+/* Dark Mode Overrides for Alert Warning */
+body.dark-mode .alert-warning-custom,
+body.dark-mode .alert-warning {
+    background-color: rgba(245, 158, 11, 0.16) !important;
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+    border-left: 5px solid #f59e0b !important;
+    color: #fef08a !important;
+}
+
+body.dark-mode .alert-warning-custom .alert-warning-title,
+body.dark-mode .alert-warning-custom strong,
+body.dark-mode .alert-warning .text-dark,
+body.dark-mode .alert-warning strong {
+    color: #fef08a !important;
+}
+
+body.dark-mode .alert-warning-custom .alert-warning-text,
+body.dark-mode .alert-warning-custom small,
+body.dark-mode .alert-warning-custom p,
+body.dark-mode .alert-warning small,
+body.dark-mode .alert-warning p,
+body.dark-mode .alert-warning .text-muted {
+    color: #fde68a !important;
+}
+
+body.dark-mode .alert-warning-custom i,
+body.dark-mode .alert-warning i {
+    color: #fbbf24 !important;
+}
+
+body.dark-mode .badge.bg-warning,
+body.dark-mode .badge.bg-warning.text-dark {
+    color: #451a03 !important;
+    font-weight: 700 !important;
+}
+
+/* Row & Stat highlight helpers */
+.row-draft {
+    background-color: #fffbeb !important;
+}
+body.dark-mode .row-draft {
+    background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.row-counted-matched {
+    background-color: #f0fdf4 !important;
+}
+body.dark-mode .row-counted-matched {
+    background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.summary-box-light {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+body.dark-mode .summary-box-light {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+}
+
+.stat-box-blue {
+    background-color: #eff6ff;
+}
+body.dark-mode .stat-box-blue {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.stat-box-green {
+    background-color: #f0fdf4;
+}
+body.dark-mode .stat-box-green {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+.stat-box-red {
+    background-color: #fef2f2;
+}
+body.dark-mode .stat-box-red {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
 /* Fix Fixed Top Header Overlap */
 .content {
     margin-top: 15px !important;
@@ -273,3 +387,4 @@ body.dark-mode .sidebar__logo img {
         display: none !important;
     }
 }
+

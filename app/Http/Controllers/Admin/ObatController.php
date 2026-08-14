@@ -17,13 +17,18 @@ class ObatController extends Controller
     public function index(Request $request)
     {
         $search = $request->input('search');
-        $obats = Obat::when($search, function ($query, $search) {
+        $obats = Obat::with('supplier')->when($search, function ($query, $search) {
             return $query->where('nama', 'like', "%{$search}%")
-                         ->orWhere('kode', 'like', "%{$search}%");
-        })->paginate(5)->withQueryString();
+                         ->orWhere('kode', 'like', "%{$search}%")
+                         ->orWhere('merk', 'like', "%{$search}%")
+                         ->orWhere('supplier_name', 'like', "%{$search}%");
+        })->paginate(10)->withQueryString();
         
+        $suppliers = \App\Models\Supplier::select('id', 'name', 'code')->get();
+
         return Inertia::render('Admin/Obat/Index', [
             'obats' => $obats,
+            'suppliers' => $suppliers,
             'filters' => ['search' => $search]
         ]);
     }
@@ -54,11 +59,19 @@ class ObatController extends Controller
             'harga' => 'required|numeric',
             'stok' => 'nullable|integer|min:0',
             'min_stok' => 'nullable|integer|min:0',
+            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_name' => 'nullable|string|max:150',
+            'merk' => 'nullable|string|max:100',
         ]);
 
         $data = $request->all();
         $data['stok'] = $request->input('stok', 0);
         $data['min_stok'] = $request->input('min_stok', 10);
+
+        if ($request->supplier_id && empty($data['supplier_name'])) {
+            $sup = \App\Models\Supplier::find($request->supplier_id);
+            if ($sup) $data['supplier_name'] = $sup->name;
+        }
 
         if ($request->hasFile('gambar')) {
             $imageName = time().'.'.$request->gambar->extension();  
@@ -86,11 +99,19 @@ class ObatController extends Controller
             'harga' => 'required|numeric',
             'stok' => 'nullable|integer|min:0',
             'min_stok' => 'nullable|integer|min:0',
+            'supplier_id' => 'nullable|exists:suppliers,id',
+            'supplier_name' => 'nullable|string|max:150',
+            'merk' => 'nullable|string|max:100',
         ]);
 
         $data = $request->all();
         if ($request->has('min_stok')) {
             $data['min_stok'] = $request->input('min_stok', 10);
+        }
+
+        if ($request->supplier_id && empty($data['supplier_name'])) {
+            $sup = \App\Models\Supplier::find($request->supplier_id);
+            if ($sup) $data['supplier_name'] = $sup->name;
         }
 
         if ($request->hasFile('gambar')) {
@@ -110,8 +131,16 @@ class ObatController extends Controller
     public function destroy(string $id)
     {
         $obat = Obat::findOrFail($id);
+        $obat->update(['deleted_by' => auth()->id()]);
         $obat->delete();
 
-        return redirect()->route('admin.obat.index')->with('success', 'Obat berhasil dihapus!');
+        app(\App\Services\AuditLogService::class)->log(
+            'DELETE',
+            'Produk',
+            ['kode' => $obat->kode, 'nama' => $obat->nama],
+            ['status' => 'SOFT_DELETED']
+        );
+
+        return redirect()->route('admin.obat.index')->with('success', 'Obat berhasil di-soft delete! Data dapat dipulihkan melalui menu Trash.');
     }
 }

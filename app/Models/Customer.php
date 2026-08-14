@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Customer extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'code',
@@ -27,6 +28,7 @@ class Customer extends Model
         'referred_by',
         'status',
         'is_active',
+        'deleted_by',
     ];
 
     protected $casts = [
@@ -35,6 +37,11 @@ class Customer extends Model
         'total_spending' => 'decimal:2',
         'is_active' => 'boolean',
     ];
+
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
 
     public function tier()
     {

@@ -68,6 +68,7 @@ const formatCurrency = (val) => {
                                 <th>Tgl Pembelian</th>
                                 <th>Status Bayar</th>
                                 <th>Total Pembelian</th>
+                                <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -82,9 +83,14 @@ const formatCurrency = (val) => {
                                     </span>
                                 </td>
                                 <td class="fw-bold text-primary">{{ formatCurrency(p.grand_total) }}</td>
+                                <td>
+                                    <Link :href="route('returns.create', { type: 'purchase', reference_id: p.id })" class="btn btn-sm btn-outline-danger">
+                                        RETUR
+                                    </Link>
+                                </td>
                             </tr>
                             <tr v-if="!purchases.data || purchases.data.length === 0">
-                                <td colspan="6" class="text-center py-4 text-muted">Belum ada riwayat pembelian.</td>
+                                <td colspan="7" class="text-center py-4 text-muted">Belum ada riwayat pembelian.</td>
                             </tr>
                         </tbody>
                     </table>

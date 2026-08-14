@@ -33,6 +33,27 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $user = Auth::user();
+        if ($user) {
+            /** @var \App\Models\User $user */
+            $user->update([
+                'last_login_at' => now(),
+                'last_login_ip' => $request->ip(),
+            ]);
+
+            \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+                'user_id' => $user->id,
+                'action' => 'LOGIN',
+                'module' => 'Auth',
+                'record_id' => (string) $user->id,
+                'new_values' => json_encode(['ip' => $request->ip(), 'time' => now()->toDateTimeString()]),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

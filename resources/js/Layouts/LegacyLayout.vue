@@ -1,14 +1,44 @@
 <script setup>
 import { Link, usePage, router } from '@inertiajs/vue3';
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { showConfirm } from '@/Utils/swal';
+import Swal from 'sweetalert2';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
+// Global Swal Flash Message Listener
+watch(() => page.props.flash, (flash) => {
+    if (flash?.success) {
+        Swal.fire({
+            title: 'Berhasil!',
+            text: flash.success,
+            icon: 'success',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#10b981',
+            customClass: { popup: 'rounded-4 shadow-lg border-0' }
+        });
+    }
+    if (flash?.error) {
+        Swal.fire({
+            title: 'Gagal!',
+            text: flash.error,
+            icon: 'error',
+            confirmButtonText: 'Tutup',
+            confirmButtonColor: '#ef4444',
+            customClass: { popup: 'rounded-4 shadow-lg border-0' }
+        });
+    }
+}, { deep: true, immediate: true });
+
 const isCollapsed = ref(false);
 const isDarkMode = ref(false);
 const currentTime = ref('');
+const hasLogoError = ref(false);
+
+const handleLogoError = () => {
+    hasLogoError.value = true;
+};
 
 let clockInterval = null;
 
@@ -59,6 +89,29 @@ const toggleDarkMode = () => {
     }
 };
 
+const navWrapper = ref(null);
+let unbindNavigate = null;
+
+const handleSidebarScroll = () => {
+    if (navWrapper.value) {
+        sessionStorage.setItem('sidebar_scroll_pos', navWrapper.value.scrollTop);
+    }
+};
+
+const restoreSidebarScroll = () => {
+    if (navWrapper.value) {
+        const savedPos = sessionStorage.getItem('sidebar_scroll_pos');
+        if (savedPos !== null) {
+            navWrapper.value.scrollTop = parseInt(savedPos, 10);
+        } else {
+            const activeLink = navWrapper.value.querySelector('.sidebar__link.active');
+            if (activeLink) {
+                activeLink.scrollIntoView({ block: 'nearest' });
+            }
+        }
+    }
+};
+
 onMounted(() => {
     updateClock();
     clockInterval = setInterval(updateClock, 1000);
@@ -67,10 +120,17 @@ onMounted(() => {
         document.body.classList.add('dark-mode');
         isDarkMode.value = true;
     }
+
+    setTimeout(restoreSidebarScroll, 30);
+
+    unbindNavigate = router.on('navigate', () => {
+        setTimeout(restoreSidebarScroll, 30);
+    });
 });
 
 onUnmounted(() => {
     if (clockInterval) clearInterval(clockInterval);
+    if (unbindNavigate) unbindNavigate();
 });
 
 const logout = () => {
@@ -130,14 +190,29 @@ const logout = () => {
         </header>
         <!-- Sidebar -->
         <aside class="sidebar shadow-sm" :class="{ 'collapsed': isCollapsed }">
-            <div class="sidebar__header mb-3">
-                <i class="bx bx-menu hamburger" @click="toggleSidebar"></i>
-                <div class="sidebar__logo">
-                    <img class="sidebar__text" src="/Assets/img/LOGO.svg" alt="Logo Apoteker">
+            <div class="sidebar__header d-flex align-items-center justify-content-between p-3 border-bottom border-white border-opacity-10 mb-3">
+                <div class="d-flex align-items-center gap-2 overflow-hidden">
+                    <div class="brand-logo-wrapper d-flex align-items-center justify-content-center rounded-3 bg-white bg-opacity-15 p-1.5 flex-shrink-0 shadow-xs" style="width: 38px; height: 38px;">
+                        <img v-if="$page.props.app_settings?.pharmacy_logo && !hasLogoError"
+                             :src="$page.props.app_settings.pharmacy_logo"
+                             @error="handleLogoError"
+                             alt="Logo Apotek"
+                             style="max-height: 30px; max-width: 30px; object-fit: contain;" />
+                        <i v-else class="bx bx-plus-medical text-warning fs-4"></i>
+                    </div>
+
+                    <div v-if="!isCollapsed" class="sidebar__brand-info text-truncate">
+                        <h6 class="fw-bold text-white mb-0 text-truncate font-outfit" style="font-size: 0.92rem; letter-spacing: 0.02em;">
+                            {{ $page.props.app_settings?.pharmacy_name || 'APOTEK MEDIKA' }}
+                        </h6>
+                        <small class="text-white-50 d-block text-truncate" style="font-size: 0.65rem;">Pharmacy System</small>
+                    </div>
                 </div>
+
+                <i class="bx bx-menu hamburger text-white fs-3 cursor-pointer m-0 p-1" @click="toggleSidebar" title="Toggle Sidebar"></i>
             </div>
 
-            <div class="nav-links-wrapper">
+            <div class="nav-links-wrapper" ref="navWrapper" @scroll="handleSidebarScroll">
                 <!-- Admin Menus -->
                 <template v-if="user?.role === 'admin'">
                     <!-- Category: UTAMA -->
@@ -153,6 +228,22 @@ const logout = () => {
                         <i class="bx bx-shopping-bag sidebar__icon"></i>
                         <span class="sidebar__text">POS / Kasir</span>
                     </Link>
+                    <Link :href="route('shifts.index')" class="sidebar__link" :class="{ 'active': route().current('shifts.*') }">
+                        <i class="bx bx-time-five sidebar__icon"></i>
+                        <span class="sidebar__text">Shift Kasir</span>
+                    </Link>
+                    <Link :href="route('master-shifts.index')" class="sidebar__link" :class="{ 'active': route().current('master-shifts.*') }">
+                        <i class="bx bx-calendar-event sidebar__icon"></i>
+                        <span class="sidebar__text">Mastering Shift</span>
+                    </Link>
+                    <Link :href="route('sales.history.index')" class="sidebar__link" :class="{ 'active': route().current('sales.history.*') }">
+                        <i class="bx bx-history sidebar__icon"></i>
+                        <span class="sidebar__text">Riwayat Penjualan</span>
+                    </Link>
+                    <Link :href="route('sales.cashier.index')" class="sidebar__link" :class="{ 'active': route().current('sales.cashier.*') }">
+                        <i class="bx bx-user-check sidebar__icon"></i>
+                        <span class="sidebar__text">Penjualan Per Kasir</span>
+                    </Link>
                     <Link :href="route('prescriptions.index')" class="sidebar__link" :class="{ 'active': route().current('prescriptions.*') }">
                         <i class="bx bx-notepad sidebar__icon"></i>
                         <span class="sidebar__text">Resep Dokter</span>
@@ -160,6 +251,10 @@ const logout = () => {
                     <Link :href="route('purchases.index')" class="sidebar__link" :class="{ 'active': route().current('purchases.*') }">
                         <i class="bx bx-cart-download sidebar__icon"></i>
                         <span class="sidebar__text">Pembelian PO</span>
+                    </Link>
+                    <Link :href="route('returns.index')" class="sidebar__link" :class="{ 'active': route().current('returns.*') }">
+                        <i class="bx bx-repost sidebar__icon"></i>
+                        <span class="sidebar__text">Retur Barang</span>
                     </Link>
 
                     <!-- Category: INVENTARIS OBAT -->
@@ -172,9 +267,9 @@ const logout = () => {
                         <i class="bx bx-package sidebar__icon"></i>
                         <span class="sidebar__text">Stok Real Time</span>
                     </Link>
-                    <Link :href="route('inventory.opname')" class="sidebar__link" :class="{ 'active': route().current('inventory.opname*') }">
+                    <Link :href="route('opname.index')" class="sidebar__link" :class="{ 'active': route().current('opname.*') }">
                         <i class="bx bx-task sidebar__icon"></i>
-                        <span class="sidebar__text">Stock Opname</span>
+                        <span class="sidebar__text">Stok Opname</span>
                     </Link>
                     <Link :href="route('inventory.movements')" class="sidebar__link" :class="{ 'active': route().current('inventory.movements') }">
                         <i class="bx bx-transfer sidebar__icon"></i>
@@ -248,6 +343,10 @@ const logout = () => {
                         <i class="bx bx-history sidebar__icon"></i>
                         <span class="sidebar__text">Audit Log</span>
                     </Link>
+                    <Link :href="route('admin.trash.index')" class="sidebar__link" :class="{ 'active': route().current('admin.trash.*') }">
+                        <i class="bx bx-trash-alt sidebar__icon text-danger"></i>
+                        <span class="sidebar__text fw-bold text-danger">Trash / Data Terhapus</span>
+                    </Link>
                     <Link :href="route('admin.approvals.index')" class="sidebar__link" :class="{ 'active': route().current('admin.approvals.*') }">
                         <i class="bx bx-check-shield sidebar__icon"></i>
                         <span class="sidebar__text">Approvals</span>
@@ -272,6 +371,10 @@ const logout = () => {
                     <Link :href="route('pos.index')" class="sidebar__link" :class="{ 'active': route().current('pos.*') }">
                         <i class="bx bx-shopping-bag sidebar__icon"></i>
                         <span class="sidebar__text">Transaksi POS</span>
+                    </Link>
+                    <Link :href="route('sales.history.index')" class="sidebar__link" :class="{ 'active': route().current('sales.history.*') }">
+                        <i class="bx bx-history sidebar__icon"></i>
+                        <span class="sidebar__text">Riwayat Penjualan</span>
                     </Link>
                 </template>
 

@@ -29,10 +29,26 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $settings = \Illuminate\Support\Facades\Schema::hasTable('settings') 
+            ? \Illuminate\Support\Facades\DB::table('settings')->pluck('value', 'key')->all()
+            : [];
+
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user(),
+            ],
+            'app_settings' => [
+                'pharmacy_name' => $settings['pharmacy_name'] ?? 'Apotek Medika Sore',
+                'pharmacy_logo' => $settings['pharmacy_logo'] ?? null,
+                'pharmacy_address' => $settings['pharmacy_address'] ?? 'Jl. Raya Farmasi No. 10, Jakarta',
+                'pharmacy_phone' => $settings['pharmacy_phone'] ?? '021-5551234',
+                'pharmacist_name' => $settings['pharmacist_name'] ?? 'apt. Budi Santoso, S.Farm',
+                'pharmacist_license' => $settings['pharmacist_license'] ?? 'SIPA/503/001/2026',
+            ],
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
         ];
     }

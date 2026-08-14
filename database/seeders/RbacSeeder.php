@@ -30,7 +30,7 @@ class RbacSeeder extends Seeder
             ['name' => 'Apotek Medika Purbalingga', 'address' => 'Jl. Ahmad Yani No. 12 Purbalingga', 'phone' => '0281-891234', 'is_active' => true]
         );
 
-        // 2. Create Matrix Permissions (13 Modules x 6 Actions)
+        // 2. Create Matrix Permissions (14 Modules x 6 Actions)
         $modules = [
             'dashboard' => 'Dashboard',
             'users' => 'User & Access',
@@ -45,9 +45,12 @@ class RbacSeeder extends Seeder
             'finance' => 'Keuangan',
             'reports' => 'Laporan',
             'settings' => 'Pengaturan',
+            'retur' => 'Retur Barang',
+            'shift' => 'Manajemen Shift Kasir',
+            'sales' => 'Laporan Penjualan',
         ];
 
-        $actions = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+        $actions = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'refund', 'cancel', 'open', 'close', 'force_close', 'adjust_cash', 'view_all_cashier', 'view_cashier'];
 
         foreach ($modules as $modKey => $modLabel) {
             foreach ($actions as $action) {
@@ -61,20 +64,20 @@ class RbacSeeder extends Seeder
             'Owner' => Permission::all()->pluck('name')->toArray(),
             'Apoteker' => [
                 'dashboard.view', 'products.view', 'products.edit', 'stock.view', 'opname.view', 'opname.create', 'opname.approve',
-                'stock_card.view', 'pos.view', 'pos.create', 'po.view', 'membership.view', 'reports.view'
+                'stock_card.view', 'pos.view', 'pos.create', 'po.view', 'membership.view', 'reports.view', 'retur.view', 'retur.create', 'retur.approve'
             ],
             'Kasir' => [
                 'dashboard.view', 'products.view', 'stock.view', 'pos.view', 'pos.create', 'membership.view', 'membership.create'
             ],
             'Gudang' => [
                 'dashboard.view', 'products.view', 'stock.view', 'stock.edit', 'opname.view', 'opname.create',
-                'stock_card.view', 'po.view', 'suppliers.view'
+                'stock_card.view', 'po.view', 'suppliers.view', 'retur.view', 'retur.create'
             ],
             'Purchasing' => [
-                'dashboard.view', 'products.view', 'stock.view', 'po.view', 'po.create', 'po.edit', 'po.approve', 'suppliers.view', 'suppliers.create'
+                'dashboard.view', 'products.view', 'stock.view', 'po.view', 'po.create', 'po.edit', 'po.approve', 'suppliers.view', 'suppliers.create', 'retur.view', 'retur.create'
             ],
             'Keuangan' => [
-                'dashboard.view', 'pos.view', 'po.view', 'finance.view', 'finance.create', 'finance.edit', 'finance.approve', 'reports.view', 'reports.export'
+                'dashboard.view', 'pos.view', 'po.view', 'finance.view', 'finance.create', 'finance.edit', 'finance.approve', 'reports.view', 'reports.export', 'retur.view', 'retur.refund'
             ],
         ];
 

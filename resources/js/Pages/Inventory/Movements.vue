@@ -128,6 +128,27 @@ const formatNumber = (val) => {
     return new Intl.NumberFormat('id-ID').format(val || 0);
 };
 
+const getMovementLabel = (type) => {
+    const labels = {
+        'PURCHASE'       : 'Pembelian',
+        'SALE'           : 'Penjualan',
+        'SALE_RETURN'    : 'Retur Jual',
+        'PURCHASE_RETURN': 'Retur Beli',
+        'STOCK_OPNAME'   : 'Stock Opname',
+        'ADJUSTMENT_IN'  : 'Penyesuaian +',
+        'ADJUSTMENT_OUT' : 'Penyesuaian -',
+        'DAMAGED'        : 'Rusak',
+        'EXPIRED'        : 'Kedaluwarsa',
+        'LOST'           : 'Hilang',
+        'BONUS'          : 'Bonus',
+        'TRANSFER_IN'    : 'Transfer Masuk',
+        'TRANSFER_OUT'   : 'Transfer Keluar',
+        'INITIAL_STOCK'  : 'Stok Awal',
+        'REVERSAL'       : 'Reversal',
+    };
+    return labels[type] || type;
+};
+
 const printStockCard = () => {
     window.print();
 };
@@ -305,16 +326,28 @@ const printStockCard = () => {
                                             'bg-danger': m.movement_type === 'DAMAGED' || m.movement_type === 'EXPIRED' || m.movement_type === 'LOST',
                                             'bg-info text-dark': m.movement_type === 'TRANSFER_IN' || m.movement_type === 'TRANSFER_OUT' || m.movement_type === 'INITIAL_STOCK'
                                         }">
-                                            {{ m.movement_type }}
+                                            {{ getMovementLabel(m.movement_type) }}
                                         </span>
                                     </td>
                                     <td class="small font-monospace fw-bold text-primary">{{ m.reference_number || m.movement_number }}</td>
-                                    <td class="text-end fw-bold text-success">
-                                        {{ m.type === 'in' ? '+' + formatNumber(m.quantity) : '-' }}
+                                    <!-- Masuk (+) -->
+                                    <td class="text-end fw-bold">
+                                        <span v-if="m.movement_type === 'STOCK_OPNAME' && m.quantity === 0" class="text-muted font-monospace">
+                                            0
+                                        </span>
+                                        <span v-else-if="m.type === 'in'" class="text-success">
+                                            +{{ formatNumber(m.quantity) }}
+                                        </span>
+                                        <span v-else class="text-muted">—</span>
                                     </td>
-                                    <td class="text-end fw-bold text-danger">
-                                        {{ m.type === 'out' ? '-' + formatNumber(m.quantity) : '-' }}
+                                    <!-- Keluar (-) -->
+                                    <td class="text-end fw-bold">
+                                        <span v-if="m.type === 'out'" class="text-danger">
+                                            -{{ formatNumber(m.quantity) }}
+                                        </span>
+                                        <span v-else class="text-muted">—</span>
                                     </td>
+                                    <!-- Saldo -->
                                     <td class="text-end fw-bold text-primary fs-6">
                                         {{ formatNumber(m.stock_after) }}
                                     </td>
