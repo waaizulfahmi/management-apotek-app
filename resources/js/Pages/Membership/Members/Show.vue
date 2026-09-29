@@ -1,11 +1,37 @@
 <script setup>
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { showSuccess } from '@/Utils/swal';
 
 const props = defineProps({
     customer: Object,
     nextTier: Object,
 });
+
+const editForm = useForm({
+    name: props.customer.name,
+    phone: props.customer.phone,
+    email: props.customer.email || '',
+    date_of_birth: props.customer.date_of_birth || '',
+    gender: props.customer.gender || 'L',
+    address: props.customer.address || '',
+    allergies: props.customer.allergies || '',
+    status: props.customer.status || 'ACTIVE',
+});
+
+const submitAllergiesUpdate = () => {
+    editForm.put(route('membership.members.update', props.customer.id), {
+        onSuccess: () => {
+            const modalEl = document.getElementById('editAlergiModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+            showSuccess('Alergi Berhasil Diperbarui', 'Data riwayat alergi obat member berhasil disimpan!');
+        }
+    });
+};
 
 const formatRupiah = (val) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0);
@@ -148,10 +174,31 @@ const progressPercent = props.nextTier && nextMin > 0 ? Math.min(100, Math.round
                         </div>
                     </div>
 
-                    <!-- Warning Box Alergi Obat -->
-                    <div class="mt-3 p-3 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger">
-                        <div class="fw-bold"><i class="bx bx-error-circle me-1 fs-5 align-middle"></i>Riwayat / Catatan Alergi Obat:</div>
-                        <div class="fs-6 mt-1">{{ customer.allergies || 'Tidak ada riwayat alergi obat' }}</div>
+                    <!-- Warning / Safe Box Alergi Obat -->
+                    <div v-if="customer.allergies" class="mt-3 p-3 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="fw-bold fs-6 d-flex align-items-center gap-1 text-danger">
+                                <i class="bx bx-shield-x me-1 fs-5 align-middle"></i>PERINGATAN ALERGI OBAT MEMBER:
+                            </div>
+                            <div class="fs-6 mt-1 text-dark fw-bold">
+                                Sensitif Terhadap: <span class="badge bg-danger text-white fs-6 px-2 py-1">{{ customer.allergies }}</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-danger shadow-xs fw-bold px-3 rounded-pill" data-bs-toggle="modal" data-bs-target="#editAlergiModal">
+                            <i class="bx bx-edit me-1"></i>Edit Alergi Obat
+                        </button>
+                    </div>
+                    <div v-else class="mt-3 p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 text-success d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bx bx-shield-quarter fs-4 text-success"></i>
+                            <div>
+                                <strong class="d-block text-success">Riwayat Alergi Obat: <span class="badge bg-success text-white ms-1"><i class="bx bx-check-circle me-1"></i>Tidak Ada (Aman)</span></strong>
+                                <small class="text-muted">Member tidak memiliki riwayat alergi obat terdaftar.</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-success shadow-xs fw-bold px-3 rounded-pill" data-bs-toggle="modal" data-bs-target="#editAlergiModal">
+                            <i class="bx bx-plus me-1"></i>+ Catat Alergi
+                        </button>
                     </div>
                 </div>
 
@@ -236,5 +283,38 @@ const progressPercent = props.nextTier && nextMin > 0 ? Math.min(100, Math.round
                 </div>
             </div>
         </section>
+
+        <!-- Modal Edit Alergi Obat Member -->
+        <div class="modal fade" id="editAlergiModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content rounded-4 border-0 shadow">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold text-dark"><i class="bx bx-shield-x text-danger me-2"></i>Kelola Riwayat Alergi Obat Member</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form @submit.prevent="submitAllergiesUpdate">
+                        <div class="modal-body">
+                            <div class="alert alert-warning small border-0 mb-3">
+                                <i class="bx bx-info-circle me-1"></i>
+                                Informasi alergi obat sangat penting untuk keselamatan pasien saat transaksi di Kasir (POS).
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark">Nama Member</label>
+                                <input type="text" class="form-control bg-light" :value="customer.name" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-danger"><i class="bx bx-error-circle me-1"></i>Catatan / Zat Alergi Obat</label>
+                                <textarea class="form-control border-danger border-opacity-50" rows="3" v-model="editForm.allergies" placeholder="Contoh: Paracetamol, Amoxicillin, Penisilin, Cefadroxil (Kosongkan jika tidak ada/aman)"></textarea>
+                                <div class="form-text small text-muted">Ketik nama obat atau zat aktif yang memicu reaksi alergi pada pasien ini.</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer border-0 pt-0">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                            <button type="submit" class="btn btn-danger font-semibold" :disabled="editForm.processing">Simpan Alergi Obat</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </LegacyLayout>
 </template>

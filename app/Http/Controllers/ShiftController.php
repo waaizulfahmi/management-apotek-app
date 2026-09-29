@@ -172,7 +172,7 @@ class ShiftController extends Controller
         $activeShift = $this->shiftService->getActiveShift(auth()->id());
         if ($activeShift) {
             $this->shiftService->recalculateShiftMetrics($activeShift->id);
-            $activeShift = $activeShift->fresh(['outlet']);
+            $activeShift = $activeShift->fresh(['outlet', 'masterShift']);
         }
 
         return response()->json([

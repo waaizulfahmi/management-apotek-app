@@ -30,6 +30,11 @@ class StockOpname extends Model
         return $this->belongsTo(User::class, 'user_id')->withTrashed();
     }
 
+    public function outlet()
+    {
+        return $this->belongsTo(Outlet::class, 'outlet_id')->withTrashed();
+    }
+
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by')->withTrashed();

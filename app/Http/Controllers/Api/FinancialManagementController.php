@@ -144,6 +144,44 @@ class FinancialManagementController extends Controller
         return redirect()->back()->with('success', 'Akun Kas / Bank baru berhasil ditambahkan!');
     }
 
+    public function updateAccount(Request $request, $id)
+    {
+        $request->validate([
+            'name' => 'required|string|max:150',
+            'type' => 'required|in:cash,bank,qris,ewallet',
+            'initial_balance' => 'required|numeric|min:0',
+        ]);
+
+        $account = DB::table('cash_bank_accounts')->where('id', $id)->first();
+        if (!$account) {
+            return redirect()->back()->with('error', 'Akun Kas / Bank tidak ditemukan.');
+        }
+
+        $diff = (float)$request->initial_balance - (float)$account->initial_balance;
+        $newCurrentBalance = (float)$account->current_balance + $diff;
+
+        DB::table('cash_bank_accounts')->where('id', $id)->update([
+            'name' => $request->name,
+            'type' => $request->type,
+            'account_number' => $request->account_number,
+            'initial_balance' => $request->initial_balance,
+            'current_balance' => $newCurrentBalance,
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Akun Kas / Bank berhasil diperbarui!');
+    }
+
+    public function destroyAccount($id)
+    {
+        try {
+            DB::table('cash_bank_accounts')->where('id', $id)->delete();
+            return redirect()->back()->with('success', 'Akun Kas / Bank berhasil dihapus!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Akun Kas / Bank tidak dapat dihapus karena sudah memiliki transaksi terkait.');
+        }
+    }
+
     /**
      * Accounts Payable (Hutang Supplier)
      */
@@ -303,33 +341,30 @@ class FinancialManagementController extends Controller
     }
 
     /**
-     * Profit & Loss Statement (Laba Rugi)
+     * Profit & Loss Statement (Laba Rugi Dashboard)
      */
     public function profitLoss(Request $request)
     {
-        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
+        $service = app(\App\Services\ProfitLossService::class);
+        $data = $service->getProfitLossData($request->all());
 
-        $revenue = DB::table('sales')->whereBetween('sale_date', [$startDate, $endDate])->where('status', 'completed')->sum('grand_total');
-        $cogs = DB::table('sale_items')->join('sales', 'sale_items.sale_id', '=', 'sales.id')->whereBetween('sales.sale_date', [$startDate, $endDate])->sum(DB::raw('quantity * unit_price * 0.65'));
-        $grossProfit = $revenue - $cogs;
+        $outlets = DB::table('outlets')->whereNull('deleted_at')->select('id', 'name')->get();
+        $cashiers = DB::table('users')->select('id', 'name')->get();
+        $categories = DB::table('obats')->whereNotNull('kategori')->where('kategori', '!=', '')->distinct()->pluck('kategori')->toArray();
 
-        $expenses = DB::table('expenses')
-            ->join('expense_categories', 'expenses.category_id', '=', 'expense_categories.id')
-            ->select('expenses.*', 'expense_categories.name as category')
-            ->whereBetween('expenses.expense_date', [$startDate, $endDate])
-            ->get();
-        $totalExpenses = $expenses->sum('amount');
-        $netProfit = $grossProfit - $totalExpenses;
-
-        return Inertia::render('Finance/ProfitLoss', [
-            'revenue' => (float)$revenue,
-            'cogs' => (float)$cogs,
-            'gross_profit' => (float)$grossProfit,
-            'expenses' => $expenses,
-            'total_expenses' => (float)$totalExpenses,
-            'net_profit' => (float)$netProfit,
-            'filters' => ['start_date' => $startDate, 'end_date' => $endDate]
-        ]);
+        return Inertia::render('Finance/ProfitLoss', array_merge($data, [
+            'outlets' => $outlets,
+            'cashiers' => $cashiers,
+            'categories' => $categories,
+            'filters' => [
+                'period' => $request->input('period', 'this_month'),
+                'start_date' => $data['start_date'],
+                'end_date' => $data['end_date'],
+                'outlet_id' => $request->input('outlet_id', ''),
+                'cashier_id' => $request->input('cashier_id', ''),
+                'category' => $request->input('category', ''),
+            ]
+        ]));
     }
 }
+

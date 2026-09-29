@@ -285,4 +285,127 @@ class UserController extends Controller
 
         return redirect()->back()->with('success', "User {$user->name} berhasil di-force logout!");
     }
+
+    /**
+     * Manage & Update User Outlet Access
+     */
+    public function updateOutlets(Request $request, $id)
+    {
+        $targetUser = User::findOrFail($id);
+
+        $request->validate([
+            'access_all_outlets' => 'boolean',
+            'outlet_ids' => 'required_if:access_all_outlets,false|array',
+            'outlet_ids.*' => 'exists:outlets,id',
+            'primary_outlet_id' => 'required|exists:outlets,id',
+        ]);
+
+        $accessAll = (bool) $request->access_all_outlets;
+        $primaryOutletId = (int) $request->primary_outlet_id;
+        $requestedOutletIds = $accessAll ? [] : array_map('intval', $request->outlet_ids ?: []);
+
+        if (!$accessAll && !in_array($primaryOutletId, $requestedOutletIds)) {
+            $requestedOutletIds[] = $primaryOutletId;
+        }
+
+        // Active shift safeguard: ensure target user does not have an open active shift in an outlet being revoked
+        $existingAssignedIds = DB::table('user_outlets')
+            ->where('user_id', $targetUser->id)
+            ->whereNull('deleted_at')
+            ->pluck('outlet_id')
+            ->toArray();
+
+        $revokedIds = array_diff($existingAssignedIds, $requestedOutletIds);
+        if (!$accessAll && !empty($revokedIds)) {
+            $hasActiveShift = DB::table('cashier_shifts')
+                ->where(function ($q) use ($targetUser) {
+                    $q->where('cashier_id', $targetUser->id);
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('cashier_shifts', 'user_id')) {
+                        $q->orWhere('user_id', $targetUser->id);
+                    }
+                })
+                ->where('status', 'OPEN')
+                ->whereIn('outlet_id', $revokedIds)
+                ->exists();
+
+            if ($hasActiveShift) {
+                return redirect()->back()->with('error', 'User masih memiliki shift aktif pada outlet yang akan dicabut aksesnya. Tutup shift terlebih dahulu sebelum menghapus akses outlet!');
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            // Update users table flags & primary outlet_id
+            $targetUser->update([
+                'access_all_outlets' => $accessAll,
+                'outlet_id' => $primaryOutletId,
+            ]);
+
+            if ($accessAll) {
+                // Soft delete specific mapping since user accesses all outlets
+                DB::table('user_outlets')
+                    ->where('user_id', $targetUser->id)
+                    ->update(['deleted_at' => now()]);
+
+                // Ensure primary outlet record exists
+                DB::table('user_outlets')->updateOrInsert(
+                    ['user_id' => $targetUser->id, 'outlet_id' => $primaryOutletId],
+                    ['is_primary' => true, 'deleted_at' => null, 'updated_at' => now()]
+                );
+
+                $this->auditLogService->log(
+                    'GRANT_ALL_OUTLETS',
+                    'User & Access',
+                    null,
+                    ['user_id' => $targetUser->id, 'target_user' => $targetUser->name, 'primary_outlet' => $primaryOutletId]
+                );
+            } else {
+                // Revoke removed outlets via soft delete
+                DB::table('user_outlets')
+                    ->where('user_id', $targetUser->id)
+                    ->whereNotIn('outlet_id', $requestedOutletIds)
+                    ->update(['deleted_at' => now()]);
+
+                // Sync requested outlets
+                foreach ($requestedOutletIds as $outId) {
+                    $isPrimary = ($outId === $primaryOutletId);
+                    $existing = DB::table('user_outlets')
+                        ->where('user_id', $targetUser->id)
+                        ->where('outlet_id', $outId)
+                        ->first();
+
+                    if ($existing) {
+                        DB::table('user_outlets')
+                            ->where('id', $existing->id)
+                            ->update([
+                                'is_primary' => $isPrimary,
+                                'deleted_at' => null,
+                                'updated_at' => now(),
+                            ]);
+                    } else {
+                        DB::table('user_outlets')->insert([
+                            'user_id' => $targetUser->id,
+                            'outlet_id' => $outId,
+                            'is_primary' => $isPrimary,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                $this->auditLogService->log(
+                    'ASSIGN_OUTLET',
+                    'User & Access',
+                    null,
+                    ['user_id' => $targetUser->id, 'target_user' => $targetUser->name, 'assigned_outlets' => $requestedOutletIds, 'primary_outlet' => $primaryOutletId]
+                );
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', "Akses outlet untuk user {$targetUser->name} berhasil diperbarui!");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
 }

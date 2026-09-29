@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue';
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 import RupiahInput from '@/Components/RupiahInput.vue';
 import { useForm } from '@inertiajs/vue3';
@@ -9,6 +10,14 @@ const props = defineProps({
 });
 
 const createForm = useForm({
+    name: '',
+    type: 'bank',
+    account_number: '',
+    initial_balance: 0,
+});
+
+const editAccountData = ref(null);
+const editForm = useForm({
     name: '',
     type: 'bank',
     account_number: '',
@@ -28,6 +37,35 @@ const submitAccount = () => {
             if (modal) modal.hide();
         }
     });
+};
+
+const openEditModal = (acc) => {
+    editAccountData.value = acc;
+    editForm.name = acc.name;
+    editForm.type = acc.type;
+    editForm.account_number = acc.account_number || '';
+    editForm.initial_balance = acc.initial_balance;
+
+    const modalEl = document.getElementById('editAccModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+};
+
+const submitEditAccount = () => {
+    if (!editAccountData.value) return;
+    editForm.put(route('finance.accounts.update', editAccountData.value.id), {
+        onSuccess: () => {
+            const modalEl = document.getElementById('editAccModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+    });
+};
+
+const deleteAccount = (acc) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus akun "${acc.name}"?`)) {
+        useForm({}).delete(route('finance.accounts.destroy', acc.id));
+    }
 };
 </script>
 
@@ -52,6 +90,7 @@ const submitAccount = () => {
                                 <th>No. Rekening / ID</th>
                                 <th>Saldo Awal (Rp)</th>
                                 <th class="text-end">Saldo Saat Ini (Rp)</th>
+                                <th class="text-center" style="width: 150px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -71,6 +110,17 @@ const submitAccount = () => {
                                 <td><code>{{ acc.account_number || '-' }}</code></td>
                                 <td>{{ formatCurrency(acc.initial_balance) }}</td>
                                 <td class="text-end fw-bold text-primary fs-5">{{ formatCurrency(acc.current_balance) }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-warning me-1" @click="openEditModal(acc)" title="Edit Rekening">
+                                        <i class="bx bx-edit"></i> Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @click="deleteAccount(acc)" title="Hapus Rekening">
+                                        <i class="bx bx-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr v-if="!accounts || accounts.length === 0">
+                                <td colspan="7" class="text-center py-4 text-muted">Belum ada akun kas/bank terdaftar.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -113,6 +163,47 @@ const submitAccount = () => {
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                             <button type="submit" class="btn btn-primary" :disabled="createForm.processing">Simpan Rekening</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Edit Akun -->
+        <div class="modal fade" id="editAccModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title fw-bold"><i class="bx bx-edit me-1"></i> Edit Akun Kas / Bank</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form @submit.prevent="submitEditAccount">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Nama Rekening / Akun Kas</label>
+                                <input type="text" class="form-control" v-model="editForm.name" placeholder="Contoh: Bank Mandiri Operasional" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tipe Akun</label>
+                                <select class="form-select" v-model="editForm.type" required>
+                                    <option value="cash">Cash (Tunai)</option>
+                                    <option value="bank">Bank Transfer</option>
+                                    <option value="qris">QRIS Merchant</option>
+                                    <option value="ewallet">E-Wallet (Gopay/OVO/Dana)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">No. Rekening / Virtual Account</label>
+                                <input type="text" class="form-control" v-model="editForm.account_number">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Saldo Awal (Rp)</label>
+                                <RupiahInput v-model="editForm.initial_balance" required />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                            <button type="submit" class="btn btn-warning fw-bold" :disabled="editForm.processing">Simpan Perubahan</button>
                         </div>
                     </form>
                 </div>

@@ -64,7 +64,7 @@ const deleteRole = (role) => {
 
 const protectedRoles = ['Super Admin', 'Owner', 'Apoteker', 'Kasir', 'Gudang', 'Purchasing', 'Keuangan'];
 
-const actionLabels = { view: 'View', create: 'Create', edit: 'Edit', delete: 'Delete', approve: 'Approve', export: 'Export' };
+const actionLabels = { view: 'View', create: 'Create', edit: 'Edit', delete: 'Delete', approve: 'Approve', export: 'Export', refund: 'Refund', cancel: 'Cancel' };
 
 const roleBadgeClass = (name) => {
     const map = {

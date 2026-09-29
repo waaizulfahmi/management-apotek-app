@@ -5,6 +5,8 @@ import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 
 const props = defineProps({
     sales: Object,
+    outlets: Array,
+    selectedOutletId: Number,
     filters: Object,
 });
 
@@ -12,6 +14,7 @@ const search = ref(props.filters?.search || '');
 const paymentMethod = ref(props.filters?.payment_method || '');
 const startDate = ref(props.filters?.start_date || '');
 const endDate = ref(props.filters?.end_date || '');
+const outletId = ref(props.filters?.outlet_id || props.selectedOutletId || '');
 
 let debounceTimer = null;
 const debouncedFilter = () => {
@@ -24,13 +27,14 @@ const debouncedFilter = () => {
                 payment_method: paymentMethod.value,
                 start_date: startDate.value,
                 end_date: endDate.value,
+                outlet_id: outletId.value,
             },
             { preserveState: true, replace: true }
         );
     }, 300);
 };
 
-watch([search, paymentMethod, startDate, endDate], () => {
+watch([search, paymentMethod, startDate, endDate, outletId], () => {
     debouncedFilter();
 });
 
@@ -61,22 +65,29 @@ const formatCurrency = (amount) => {
                 <!-- Filters -->
                 <div class="card border-0 shadow-sm p-3 mb-4" style="border-radius: 12px;">
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="input-group">
                                 <span class="input-group-text bg-light border-end-0"><i class="bx bx-search"></i></span>
                                 <input v-model="search" type="text" placeholder="Cari No Invoice / Pelanggan..." class="form-control border-start-0">
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-3" v-if="outlets && outlets.length > 0">
+                            <select v-model="outletId" class="form-select">
+                                <option v-for="o in outlets" :key="o.id" :value="o.id">
+                                    🏢 {{ o.code }} - {{ o.name }} {{ o.is_main ? '(Pusat)' : '' }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
                             <select v-model="paymentMethod" class="form-select">
-                                <option value="">-- Semua Metode Bayar --</option>
+                                <option value="">-- Semua Metode --</option>
                                 <option value="cash">Cash / Tunai</option>
                                 <option value="qris">QRIS</option>
                                 <option value="debit">Kartu Debit</option>
                                 <option value="transfer">Transfer Bank</option>
                             </select>
                         </div>
-                        <div class="col-md-5 d-flex gap-2 align-items-center">
+                        <div class="col-md-4 d-flex gap-2 align-items-center">
                             <input type="date" v-model="startDate" class="form-control">
                             <span class="text-muted">s/d</span>
                             <input type="date" v-model="endDate" class="form-control">

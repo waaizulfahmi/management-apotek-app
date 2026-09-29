@@ -58,6 +58,20 @@ class RbacSeeder extends Seeder
             }
         }
 
+        // Explicit Product Unit & Price Permissions
+        $unitPricePermissions = [
+            'product.view_price',
+            'product.edit_purchase_price',
+            'product.edit_selling_price',
+            'product.view_unit',
+            'product.manage_unit',
+            'product.manage_conversion',
+        ];
+
+        foreach ($unitPricePermissions as $perm) {
+            Permission::firstOrCreate(['name' => $perm]);
+        }
+
         // 3. Create Default Roles
         $roles = [
             'Super Admin' => Permission::all()->pluck('name')->toArray(),
@@ -67,7 +81,7 @@ class RbacSeeder extends Seeder
                 'stock_card.view', 'pos.view', 'pos.create', 'po.view', 'membership.view', 'reports.view', 'retur.view', 'retur.create', 'retur.approve'
             ],
             'Kasir' => [
-                'dashboard.view', 'products.view', 'stock.view', 'pos.view', 'pos.create', 'membership.view', 'membership.create'
+                'dashboard.view', 'products.view', 'stock.view', 'pos.view', 'pos.create', 'membership.view', 'membership.create', 'retur.view', 'retur.create'
             ],
             'Gudang' => [
                 'dashboard.view', 'products.view', 'stock.view', 'stock.edit', 'opname.view', 'opname.create',

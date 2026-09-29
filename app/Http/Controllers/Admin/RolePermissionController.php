@@ -33,15 +33,18 @@ class RolePermissionController extends Controller
             'opname' => 'Stok Opname',
             'stock_card' => 'Kartu Stok',
             'pos' => 'Penjualan / POS',
+            'retur' => 'Retur Penjualan & Barang',
             'po' => 'Pembelian / PO',
             'suppliers' => 'Supplier / PBF',
             'membership' => 'Membership',
             'finance' => 'Keuangan',
             'reports' => 'Laporan',
             'settings' => 'Pengaturan',
+            'shift' => 'Manajemen Shift Kasir',
+            'sales' => 'Laporan Penjualan',
         ];
 
-        $actions = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+        $actions = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'refund', 'cancel'];
 
         $allPermissions = Permission::all();
 

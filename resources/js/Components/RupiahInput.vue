@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
     modelValue: [Number, String],
@@ -10,6 +10,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+const inputRef = ref(null);
 
 const displayValue = computed(() => {
     if (props.modelValue === null || props.modelValue === undefined || props.modelValue === '') return '';
@@ -26,10 +27,17 @@ const onInput = (e) => {
     }
     emit('update:modelValue', numVal);
 };
+
+defineExpose({
+    focus: () => inputRef.value?.focus(),
+    select: () => inputRef.value?.select(),
+    inputRef,
+});
 </script>
 
 <template>
     <input
+        ref="inputRef"
         type="text"
         :value="displayValue"
         @input="onInput"
@@ -38,3 +46,4 @@ const onInput = (e) => {
         :required="required"
     />
 </template>
+

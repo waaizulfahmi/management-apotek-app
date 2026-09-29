@@ -37,8 +37,27 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminController::class, 'index'])->name('dashboard');
+    
+    // Import Obat Routes
+    Route::get('/obat/import-template', [\App\Http\Controllers\Admin\ObatController::class, 'downloadTemplate'])->name('obat.import-template');
+    Route::post('/obat/import', [\App\Http\Controllers\Admin\ObatController::class, 'import'])->name('obat.import');
+
     Route::resource('obat', \App\Http\Controllers\Admin\ObatController::class);
     Route::resource('kasir', \App\Http\Controllers\Admin\KasirController::class);
+
+    // Master Satuan Module
+    Route::get('/units', [\App\Http\Controllers\Admin\UnitController::class, 'index'])->name('units.index');
+    Route::post('/units', [\App\Http\Controllers\Admin\UnitController::class, 'store'])->name('units.store');
+    Route::put('/units/{id}', [\App\Http\Controllers\Admin\UnitController::class, 'update'])->name('units.update');
+    Route::post('/units/{id}/toggle-status', [\App\Http\Controllers\Admin\UnitController::class, 'toggleStatus'])->name('units.toggle-status');
+    Route::delete('/units/{id}', [\App\Http\Controllers\Admin\UnitController::class, 'destroy'])->name('units.destroy');
+
+    // Product Unit & Price Management Module
+    Route::get('/obat/{kode}/units-prices', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'getDetails'])->name('obat.units-prices.get');
+    Route::post('/obat/{kode}/primary-units', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'setPrimaryUnits'])->name('obat.primary-units.store');
+    Route::post('/obat/{kode}/conversion', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'saveConversion'])->name('obat.conversion.store');
+    Route::delete('/obat/{kode}/conversion/{id}', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'deleteConversion'])->name('obat.conversion.destroy');
+    Route::post('/obat/{kode}/prices', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'updatePrices'])->name('obat.prices.store');
 
     // User Management & RBAC Module
     Route::get('/users/dashboard', [UserController::class, 'dashboard'])->name('users.dashboard');
@@ -49,6 +68,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     Route::post('/users/{id}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::post('/users/{id}/force-logout', [UserController::class, 'forceLogout'])->name('users.force-logout');
+    Route::post('/users/{id}/outlets', [UserController::class, 'updateOutlets'])->name('users.update-outlets');
 
     // Role & Permission Matrix
     Route::get('/roles', [RolePermissionController::class, 'index'])->name('roles.index');
@@ -89,6 +109,7 @@ use App\Http\Controllers\Api\PurchaseOrderController;
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/pos', [\App\Http\Controllers\Api\PosController::class, 'index'])->name('pos.index');
+    Route::get('/pos/search-medicines', [\App\Http\Controllers\Api\PosController::class, 'searchMedicines'])->name('pos.search');
     Route::post('/pos/checkout', [\App\Http\Controllers\Api\PosController::class, 'checkout'])->name('pos.checkout');
 
     // Sales History & Cashier Reports Routes
@@ -155,6 +176,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/opname/{id}/finalize', [\App\Http\Controllers\StockOpnameManualController::class, 'finalize'])->name('opname.finalize');
     Route::post('/opname/{id}/cancel', [\App\Http\Controllers\StockOpnameManualController::class, 'cancel'])->name('opname.cancel');
     Route::delete('/opname/{id}', [\App\Http\Controllers\StockOpnameManualController::class, 'destroy'])->name('opname.destroy');
+    Route::get('/opname/{id}/print', [\App\Http\Controllers\StockOpnameManualController::class, 'print'])->name('opname.print');
+    Route::get('/opname/{id}/export-excel', [\App\Http\Controllers\StockOpnameManualController::class, 'exportExcel'])->name('opname.export_excel');
 
     // Enhanced Stock Opname Module Routes
     Route::get('/inventory/opname', [StockOpnameController::class, 'index'])->name('inventory.opname');
@@ -170,12 +193,16 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/finance', [FinancialManagementController::class, 'dashboard'])->name('finance.index');
     Route::get('/finance/accounts', [FinancialManagementController::class, 'accounts'])->name('finance.accounts');
     Route::post('/finance/accounts', [FinancialManagementController::class, 'storeAccount'])->name('finance.accounts.store');
+    Route::put('/finance/accounts/{id}', [FinancialManagementController::class, 'updateAccount'])->name('finance.accounts.update');
+    Route::delete('/finance/accounts/{id}', [FinancialManagementController::class, 'destroyAccount'])->name('finance.accounts.destroy');
 
     // Full-Feature Membership & Customer Loyalty Module Routes
     Route::get('/membership', [\App\Http\Controllers\Membership\MembershipController::class, 'dashboard'])->name('membership.dashboard');
     Route::get('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'members'])->name('membership.members.index');
     Route::post('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'storeMember'])->name('membership.members.store');
     Route::get('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'memberShow'])->name('membership.members.show');
+    Route::put('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'updateMember'])->name('membership.members.update');
+    Route::delete('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'destroyMember'])->name('membership.members.destroy');
     Route::get('/membership/points', [\App\Http\Controllers\Membership\MembershipController::class, 'points'])->name('membership.points.index');
     Route::get('/membership/rewards', [\App\Http\Controllers\Membership\MembershipController::class, 'rewards'])->name('membership.rewards.index');
     Route::post('/membership/rewards/redeem', [\App\Http\Controllers\Membership\MembershipController::class, 'redeemReward'])->name('membership.rewards.redeem');
@@ -197,6 +224,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingController::class, 'updateSettings'])->name('settings.update');
     Route::post('/settings/reset-logo', [SettingController::class, 'resetLogo'])->name('settings.reset-logo');
+    Route::get('/about', [\App\Http\Controllers\AboutController::class, 'index'])->name('about.index');
 
     // Returns / Retur Barang Routes
     Route::get('/returns', [\App\Http\Controllers\ReturnController::class, 'index'])->name('returns.index');
@@ -206,6 +234,32 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/returns/{id}/approve', [\App\Http\Controllers\ReturnController::class, 'approve'])->name('returns.approve');
     Route::post('/returns/{id}/cancel', [\App\Http\Controllers\ReturnController::class, 'cancel'])->name('returns.cancel');
     Route::post('/returns/{id}/log-print', [\App\Http\Controllers\ReturnController::class, 'logPrint'])->name('returns.log-print');
+
+    // Outlet Management & Switch Routes
+    Route::post('/outlets/switch', [\App\Http\Controllers\Admin\OutletController::class, 'switchOutlet'])->name('outlets.switch');
+    Route::get('/outlets', [\App\Http\Controllers\Admin\OutletController::class, 'index'])->name('outlets.index');
+    Route::post('/outlets', [\App\Http\Controllers\Admin\OutletController::class, 'store'])->name('outlets.store');
+    Route::put('/outlets/{id}', [\App\Http\Controllers\Admin\OutletController::class, 'update'])->name('outlets.update');
+    Route::delete('/outlets/{id}', [\App\Http\Controllers\Admin\OutletController::class, 'destroy'])->name('outlets.destroy');
+    Route::post('/outlets/{id}/restore', [\App\Http\Controllers\Admin\OutletController::class, 'restore'])->name('outlets.restore');
+    Route::post('/outlets/{id}/set-main', [\App\Http\Controllers\Admin\OutletController::class, 'setMain'])->name('outlets.set-main');
+    Route::post('/outlets/{id}/toggle-status', [\App\Http\Controllers\Admin\OutletController::class, 'toggleStatus'])->name('outlets.toggle-status');
+
+    // Stock per Outlet & Stock Transfer Routes
+    Route::get('/inventory/stocks-per-outlet', [\App\Http\Controllers\Inventory\StockTransferController::class, 'stockPerOutlet'])->name('inventory.stocks-per-outlet');
+    Route::get('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'index'])->name('stock-transfers.index');
+    Route::get('/inventory/stock-transfers/create', [\App\Http\Controllers\Inventory\StockTransferController::class, 'create'])->name('stock-transfers.create');
+    Route::post('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'store'])->name('stock-transfers.store');
+    Route::post('/inventory/stock-transfers/{id}/send', [\App\Http\Controllers\Inventory\StockTransferController::class, 'send'])->name('stock-transfers.send');
+    Route::post('/inventory/stock-transfers/{id}/receive', [\App\Http\Controllers\Inventory\StockTransferController::class, 'receive'])->name('stock-transfers.receive');
+    Route::post('/inventory/stock-transfers/{id}/cancel', [\App\Http\Controllers\Inventory\StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
+
+    // Outlet Product Management Routes
+    Route::get('/inventory/outlet-products', [\App\Http\Controllers\Inventory\OutletProductController::class, 'index'])->name('inventory.outlet-products.index');
+    Route::post('/inventory/outlet-products/attach', [\App\Http\Controllers\Inventory\OutletProductController::class, 'attach'])->name('inventory.outlet-products.attach');
+    Route::put('/inventory/outlet-products/{id}/price', [\App\Http\Controllers\Inventory\OutletProductController::class, 'updatePrice'])->name('inventory.outlet-products.update-price');
+    Route::post('/inventory/outlet-products/{id}/toggle-status', [\App\Http\Controllers\Inventory\OutletProductController::class, 'toggleStatus'])->name('inventory.outlet-products.toggle-status');
+    Route::delete('/inventory/outlet-products/{id}', [\App\Http\Controllers\Inventory\OutletProductController::class, 'detach'])->name('inventory.outlet-products.detach');
 });
 
 Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->group(function () {

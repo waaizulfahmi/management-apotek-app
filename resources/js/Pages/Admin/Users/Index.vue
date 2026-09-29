@@ -36,6 +36,33 @@ const resetForm = useForm({
     password: '',
 });
 
+const showOutletModal = ref(false);
+const selectedUserForOutlet = ref(null);
+
+const outletForm = useForm({
+    access_all_outlets: false,
+    outlet_ids: [],
+    primary_outlet_id: null,
+});
+
+const openOutletModal = (u) => {
+    selectedUserForOutlet.value = u;
+    outletForm.access_all_outlets = Boolean(u.access_all_outlets || ['admin', 'owner', 'superadmin', 'super admin'].includes((u.role || '').toLowerCase()));
+    outletForm.outlet_ids = u.outlets && u.outlets.length > 0 ? u.outlets.map(o => o.id) : (u.outlet_id ? [u.outlet_id] : []);
+    outletForm.primary_outlet_id = u.outlet_id || (u.primary_outlet?.id) || (props.outlets[0]?.id || null);
+    showOutletModal.value = true;
+};
+
+const submitOutletForm = () => {
+    if (!selectedUserForOutlet.value) return;
+    outletForm.post(route('admin.users.update-outlets', selectedUserForOutlet.value.id), {
+        onSuccess: () => {
+            showOutletModal.value = false;
+            showSuccess('Berhasil', 'Akses outlet user berhasil diperbarui!');
+        }
+    });
+};
+
 let searchTimeout = null;
 const applyFilters = () => {
     clearTimeout(searchTimeout);
@@ -179,10 +206,10 @@ const formatDateTime = (val) => {
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-4 small fw-bold">Nama</th>
-                                    <th class="small fw-bold">Username</th>
+                                    <th class="ps-4 small fw-bold">Nama User</th>
                                     <th class="small fw-bold">Role</th>
-                                    <th class="small fw-bold">Outlet</th>
+                                    <th class="small fw-bold">Primary Outlet</th>
+                                    <th class="small fw-bold text-center">Jumlah Outlet</th>
                                     <th class="small fw-bold">Status</th>
                                     <th class="small fw-bold">Last Login</th>
                                     <th class="small fw-bold text-end pe-4">Action</th>
@@ -196,14 +223,24 @@ const formatDateTime = (val) => {
                                                 <span class="fw-bold text-primary small">{{ (u.name || '?').charAt(0).toUpperCase() }}</span>
                                             </div>
                                             <div>
-                                                <div class="fw-semibold small">{{ u.name }}</div>
-                                                <small class="text-muted">{{ u.email }}</small>
+                                                <div class="fw-semibold small text-dark">{{ u.name }}</div>
+                                                <small class="text-muted"><code>{{ u.username }}</code> &bull; {{ u.email }}</small>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="small"><code>{{ u.username }}</code></td>
-                                    <td><span class="badge bg-primary bg-opacity-75 small">{{ u.roles?.[0]?.name || u.role || '-' }}</span></td>
-                                    <td class="small">{{ u.primary_outlet?.code || '-' }}</td>
+                                    <td><span class="badge bg-primary bg-opacity-75 small text-capitalize">{{ u.roles?.[0]?.name || u.role || '-' }}</span></td>
+                                    <td>
+                                        <span class="fw-bold text-dark small">{{ u.primary_outlet?.name || u.primary_outlet?.code || '-' }}</span>
+                                        <span v-if="u.primary_outlet?.is_main" class="badge bg-warning text-dark style-xs ms-1">Pusat</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span v-if="u.access_all_outlets || ['admin', 'owner'].includes((u.role || '').toLowerCase())" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2.5 py-1">
+                                            <i class="bx bx-check-double me-1"></i>Semua Outlet
+                                        </span>
+                                        <span v-else class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2.5 py-1">
+                                            <i class="bx bx-store-alt me-1"></i>{{ u.outlets?.length || 1 }} Outlet
+                                        </span>
+                                    </td>
                                     <td><span class="badge rounded-pill small" :class="statusBadge(u.status)">{{ u.status || 'ACTIVE' }}</span></td>
                                     <td class="small text-muted">{{ formatDateTime(u.last_login_at) }}</td>
                                     <td class="text-end pe-4">
@@ -216,6 +253,11 @@ const formatDateTime = (val) => {
                                                     <Link :href="route('admin.users.show', u.id)" class="dropdown-item small">
                                                         <i class="bx bx-show me-2 text-primary"></i> Detail
                                                     </Link>
+                                                </li>
+                                                <li>
+                                                    <button class="dropdown-item small" @click="openOutletModal(u)">
+                                                        <i class="bx bx-store-alt me-2 text-primary"></i> Kelola Outlet
+                                                    </button>
                                                 </li>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li><button class="dropdown-item small" @click="openResetModal(u)"><i class="bx bx-key me-2 text-warning"></i> Reset Password</button></li>
@@ -334,6 +376,80 @@ const formatDateTime = (val) => {
                                         <i class="bx bx-check me-1"></i> Reset Password
                                     </button>
                                     <button type="button" class="btn btn-light" @click="showResetModal = false">Batal</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Kelola Akses Outlet -->
+            <div v-if="showOutletModal" class="modal-backdrop-custom" @click.self="showOutletModal = false">
+                <div class="modal-dialog-custom">
+                    <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                        <div class="card-header bg-primary text-white py-3 px-4 d-flex justify-content-between align-items-center">
+                            <h6 class="fw-bold mb-0"><i class="bx bx-store-alt me-2"></i> Kelola Akses Outlet</h6>
+                            <button type="button" class="btn-close btn-close-white" @click="showOutletModal = false"></button>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="alert alert-light border mb-4">
+                                <div class="fw-bold text-dark fs-6">{{ selectedUserForOutlet?.name }}</div>
+                                <small class="text-muted">Username: <code>{{ selectedUserForOutlet?.username }}</code> | Role: <span class="badge bg-primary text-capitalize">{{ selectedUserForOutlet?.role }}</span></small>
+                            </div>
+
+                            <form @submit.prevent="submitOutletForm">
+                                <!-- Option: Access All Outlets -->
+                                <div class="card border border-primary border-opacity-25 bg-primary bg-opacity-10 mb-4 rounded-3 p-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkAccessAll" v-model="outletForm.access_all_outlets" />
+                                        <label class="form-check-label fw-bold text-dark" for="chkAccessAll">
+                                            <i class="bx bx-check-double text-primary me-1"></i> Berikan Akses ke Semua Outlet
+                                        </label>
+                                        <small class="text-muted d-block mt-1 style-xs">
+                                            Jika diaktifkan, user dapat mengakses seluruh outlet tanpa perlu mencentang satu per satu.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <!-- Specific Outlets Selection & Primary Outlet Assignment -->
+                                <div v-if="!outletForm.access_all_outlets" class="mb-4">
+                                    <label class="form-label fw-bold text-dark">Pilih Outlet yang Dapat Diakses *</label>
+                                    <div class="border rounded-3 p-3 bg-light">
+                                        <div v-for="o in outlets" :key="o.id" class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="checkbox" :id="'out_chk_' + o.id" :value="o.id" v-model="outletForm.outlet_ids" />
+                                                <label class="form-check-label fw-semibold text-dark" :for="'out_chk_' + o.id">
+                                                    {{ o.code }} - {{ o.name }}
+                                                    <span v-if="o.is_main" class="badge bg-warning text-dark style-xs ms-1">Pusat</span>
+                                                </label>
+                                            </div>
+
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="radio" :id="'primary_rad_' + o.id" name="primaryOutletRadio" :value="o.id" v-model="outletForm.primary_outlet_id" />
+                                                <label class="form-check-label small text-muted ms-1" :for="'primary_rad_' + o.id">
+                                                    Primary
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Primary Outlet Selection if Access All Outlets is checked -->
+                                <div v-else class="mb-4">
+                                    <label class="form-label fw-bold text-dark">Pilih Primary / Default Outlet *</label>
+                                    <select class="form-select" v-model="outletForm.primary_outlet_id" required>
+                                        <option v-for="o in outlets" :key="o.id" :value="o.id">
+                                            {{ o.code }} - {{ o.name }} {{ o.is_main ? '(Pusat)' : '' }}
+                                        </option>
+                                    </select>
+                                    <small class="text-muted d-block mt-1 style-xs">Primary Outlet akan otomatis dijadikan outlet aktif saat user login.</small>
+                                </div>
+
+                                <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                                    <button type="button" class="btn btn-secondary rounded-3" @click="showOutletModal = false">Batal</button>
+                                    <button type="submit" class="btn btn-primary rounded-3" :disabled="outletForm.processing">
+                                        <i class="bx bx-save me-1"></i> Simpan Akses Outlet
+                                    </button>
                                 </div>
                             </form>
                         </div>

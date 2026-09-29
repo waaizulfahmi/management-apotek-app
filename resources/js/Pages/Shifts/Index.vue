@@ -149,13 +149,19 @@ const getDifferenceBadge = (diff) => {
 
 const isCurrentShiftOvertimeOrMismatch = computed(() => {
     if (!props.activeShift) return false;
-    
-    if (props.activeShift.is_out_of_schedule) return true;
 
     const now = new Date();
     const curStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':00';
 
-    const master = props.activeShift.master_shift;
+    let master = props.activeShift.master_shift;
+    if (!master && props.masterShifts) {
+        const sName = (props.activeShift.shift_name || '').toLowerCase().trim();
+        master = props.masterShifts.find(m => {
+            const mName = m.name.toLowerCase().trim();
+            return mName === sName || mName.includes(sName) || sName.includes(mName);
+        });
+    }
+
     if (master) {
         const start = master.start_time;
         const end = master.end_time;
@@ -165,12 +171,12 @@ const isCurrentShiftOvertimeOrMismatch = computed(() => {
             return curStr < start && curStr > end;
         }
     } else {
-        const name = props.activeShift.shift_name;
-        if (name.includes('Pagi')) {
+        const name = (props.activeShift.shift_name || '').toLowerCase();
+        if (name.includes('pagi')) {
             return curStr < '07:00:00' || curStr > '15:00:00';
-        } else if (name.includes('Siang')) {
+        } else if (name.includes('siang')) {
             return curStr < '15:00:00' || curStr > '22:00:00';
-        } else if (name.includes('Malam')) {
+        } else if (name.includes('malam')) {
             return curStr < '22:00:00' && curStr > '07:00:00';
         }
     }

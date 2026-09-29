@@ -38,6 +38,8 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'active_outlet' => fn () => \App\Services\OutletService::getActiveOutlet($request->user()),
+            'user_outlets' => fn () => \App\Services\OutletService::getUserOutlets($request->user()),
             'app_settings' => [
                 'pharmacy_name' => $settings['pharmacy_name'] ?? 'Apotek Medika Sore',
                 'pharmacy_logo' => $settings['pharmacy_logo'] ?? null,

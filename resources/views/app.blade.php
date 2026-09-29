@@ -4,7 +4,16 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        @php
+            $appSettings = $page['props']['app_settings'] ?? [];
+            $pharmacyName = $appSettings['pharmacy_name'] ?? config('app.name', 'Apotek Medika Sore');
+            $pharmacyLogo = !empty($appSettings['pharmacy_logo']) ? asset($appSettings['pharmacy_logo']) : asset('Assets/img/LOGO.svg');
+        @endphp
+
+        <title inertia>{{ $pharmacyName }}</title>
+
+        <!-- Favicon -->
+        <link id="app-favicon" rel="icon" href="{{ $pharmacyLogo }}">
 
         <!-- Fonts & Icons -->
         <link rel="preconnect" href="https://fonts.googleapis.com">

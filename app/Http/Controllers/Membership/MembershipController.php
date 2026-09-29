@@ -145,6 +145,50 @@ class MembershipController extends Controller
     }
 
     /**
+     * Update Existing Member & Drug Allergy Info
+     */
+    public function updateMember(Request $request, $id)
+    {
+        $customer = Customer::findOrFail($id);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:30|unique:customers,phone,' . $customer->id,
+            'email' => 'nullable|email|max:255',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:L,P',
+            'address' => 'nullable|string',
+            'allergies' => 'nullable|string',
+            'status' => 'nullable|in:ACTIVE,INACTIVE',
+        ]);
+
+        $customer->update([
+            'name' => $request->name,
+            'phone' => $request->phone,
+            'email' => $request->email,
+            'date_of_birth' => $request->date_of_birth,
+            'gender' => $request->gender,
+            'address' => $request->address,
+            'allergies' => $request->allergies,
+            'status' => $request->status ?: $customer->status,
+        ]);
+
+        return redirect()->back()->with('success', "Data Member & Riwayat Alergi {$customer->name} berhasil diperbarui!");
+    }
+
+    /**
+     * Delete Member
+     */
+    public function destroyMember($id)
+    {
+        $customer = Customer::findOrFail($id);
+        $name = $customer->name;
+        $customer->delete();
+
+        return redirect()->back()->with('success', "Member {$name} berhasil dihapus.");
+    }
+
+    /**
      * Member Detail Profile Page
      */
     public function memberShow($id)

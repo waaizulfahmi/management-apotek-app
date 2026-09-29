@@ -127,8 +127,15 @@ class PurchaseOrderController extends Controller
      */
     public function create()
     {
+        $conversionService = app(\App\Services\UnitConversionService::class);
         $suppliers = DB::table('suppliers')->where('is_active', true)->get();
         $medicines = DB::table('obats')->get();
+
+        foreach ($medicines as $m) {
+            $priceData = $conversionService->getCalculatedPrices($m->kode);
+            $m->units = $priceData['unit_prices'] ?? [];
+            $m->satuan_pembelian_id = $m->satuan_pembelian_id;
+        }
 
         return Inertia::render('Purchases/PO/Create', [
             'suppliers' => $suppliers,
@@ -149,7 +156,11 @@ class PurchaseOrderController extends Controller
             'items.*.medicine_id' => 'required|exists:obats,kode',
             'items.*.order_quantity' => 'required|integer|min:1',
             'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.unit_id' => 'nullable|exists:units,id',
+            'items.*.update_master_price' => 'nullable|boolean',
         ]);
+
+        $conversionService = app(\App\Services\UnitConversionService::class);
 
         DB::beginTransaction();
         try {
@@ -196,11 +207,27 @@ class PurchaseOrderController extends Controller
             ]);
 
             foreach ($request->items as $item) {
+                $medKode = $item['medicine_id'];
+                $unitId = isset($item['unit_id']) ? (int)$item['unit_id'] : null;
+                $unitName = null;
+                $conversionFactor = 1.0000;
+
+                if ($unitId) {
+                    $uObj = \App\Models\Unit::find($unitId);
+                    if ($uObj) $unitName = $uObj->name;
+                    $conversionFactor = $conversionService->getConversionFactor($medKode, $unitId);
+                }
+
+                $qtyBase = (int)ceil($item['order_quantity'] * $conversionFactor);
                 $itemSubtotal = ($item['order_quantity'] * $item['unit_price']) - ($item['discount_amount'] ?? 0);
 
                 DB::table('purchase_order_items')->insert([
                     'purchase_order_id' => $poId,
-                    'medicine_id' => $item['medicine_id'],
+                    'medicine_id' => $medKode,
+                    'unit_id' => $unitId,
+                    'unit_name' => $unitName,
+                    'conversion_to_base' => $conversionFactor,
+                    'quantity_base' => $qtyBase,
                     'order_quantity' => $item['order_quantity'],
                     'bonus_quantity' => $item['bonus_quantity'] ?? 0,
                     'unit_price' => $item['unit_price'],
@@ -217,12 +244,39 @@ class PurchaseOrderController extends Controller
                 // Track supplier price history
                 DB::table('supplier_price_histories')->insert([
                     'supplier_id' => $request->supplier_id,
-                    'medicine_id' => $item['medicine_id'],
+                    'medicine_id' => $medKode,
                     'price' => $item['unit_price'],
                     'transaction_date' => $request->order_date,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                // If user toggled option to update master purchase price
+                if (!empty($item['update_master_price']) && $unitId) {
+                    $oldPriceRecord = \App\Models\ProductPrice::where('product_id', $medKode)
+                        ->where('unit_id', $unitId)
+                        ->where('price_type', 'PURCHASE')
+                        ->first();
+
+                    $oldP = $oldPriceRecord ? (float)$oldPriceRecord->price : 0.00;
+                    $newP = (float)$item['unit_price'];
+
+                    \App\Models\ProductPrice::updateOrCreate(
+                        ['product_id' => $medKode, 'unit_id' => $unitId, 'price_type' => 'PURCHASE'],
+                        ['price' => $newP, 'updated_by' => $userId, 'created_by' => $userId]
+                    );
+
+                    if ($oldP != $newP) {
+                        \App\Models\PriceHistory::create([
+                            'product_id' => $medKode,
+                            'unit_id' => $unitId,
+                            'price_type' => 'PURCHASE',
+                            'old_price' => $oldP,
+                            'new_price' => $newP,
+                            'user_id' => $userId,
+                        ]);
+                    }
+                }
             }
 
             // Audit Log
@@ -309,46 +363,57 @@ class PurchaseOrderController extends Controller
 
             foreach ($request->items as $itemData) {
                 $poItem = DB::table('purchase_order_items')->where('id', $itemData['item_id'])->first();
+                $conversionFactor = (float)($poItem->conversion_to_base ?? 1.0000);
+                $rxQtyTx = (int)$itemData['received_quantity'];
+                $baseQtyAdded = (int)ceil($rxQtyTx * $conversionFactor);
 
                 // 1. Insert Receipt Item Detail
                 DB::table('purchase_receipt_items')->insert([
                     'purchase_receipt_id' => $receiptId,
                     'medicine_id' => $poItem->medicine_id,
+                    'unit_id' => $poItem->unit_id ?? null,
+                    'unit_name' => $poItem->unit_name ?? null,
+                    'conversion_to_base' => $conversionFactor,
+                    'quantity_base' => $baseQtyAdded,
                     'batch_number' => $itemData['batch_number'],
                     'expired_date' => $itemData['expired_date'],
-                    'received_quantity' => $itemData['received_quantity'],
+                    'received_quantity' => $rxQtyTx,
                     'unit_cost' => $poItem->unit_price,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
 
-                // 2. Insert Batch in FEFO inventory
+                // 2. Insert Batch in FEFO inventory (stored in base unit)
                 DB::table('medicine_batches')->insert([
                     'medicine_id' => $poItem->medicine_id,
                     'batch_number' => $itemData['batch_number'],
                     'expired_date' => $itemData['expired_date'],
-                    'stock' => $itemData['received_quantity'],
+                    'stock' => $baseQtyAdded,
                     'buy_price' => $poItem->unit_price,
                     'is_active' => true,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
 
-                // 3. Increment Main Medicine Stock
+                // 3. Increment Main Medicine Stock (in base unit)
                 $medBefore = DB::table('obats')->where('kode', $poItem->medicine_id)->value('stok') ?? 0;
-                DB::table('obats')->where('kode', $poItem->medicine_id)->increment('stok', $itemData['received_quantity']);
+                DB::table('obats')->where('kode', $poItem->medicine_id)->increment('stok', $baseQtyAdded);
 
-                // 4. Create Stock Movement Log
+                // 4. Create Stock Movement Log (recording transaction Qty & base unit conversion)
                 DB::table('stock_movements')->insert([
                     'medicine_id' => $poItem->medicine_id,
                     'batch_id' => null,
                     'type' => 'in',
-                    'quantity' => $itemData['received_quantity'],
+                    'quantity' => $baseQtyAdded,
+                    'transaction_quantity' => $rxQtyTx,
+                    'unit_id' => $poItem->unit_id ?? null,
+                    'unit_name' => $poItem->unit_name ?? null,
+                    'conversion_to_base' => $conversionFactor,
                     'stock_before' => $medBefore,
-                    'stock_after' => $medBefore + $itemData['received_quantity'],
+                    'stock_after' => $medBefore + $baseQtyAdded,
                     'reference_number' => $po->po_number,
                     'user_id' => $userId,
-                    'notes' => "Penerimaan Barang PO (Inv: {$request->supplier_invoice_number}, Batch: {$itemData['batch_number']})",
+                    'notes' => "Penerimaan Barang PO ({$rxQtyTx} " . ($poItem->unit_name ?? 'Unit') . " = +{$baseQtyAdded} Base Stock, Inv: {$request->supplier_invoice_number})",
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);

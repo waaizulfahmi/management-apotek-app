@@ -12,14 +12,23 @@ use Exception;
 class PosController extends Controller
 {
     /**
-     * Display POS Index Page via Inertia
+     * Display POS Index Page via Inertia (Fast Paginated)
      */
-    public function index()
+    public function index(Request $request)
     {
-        $medicines = DB::table('obats')
-            ->select('kode', 'nama', 'gambar', 'jenis_obat', 'kategori', 'harga', 'stok')
-            ->where('stok', '>', 0)
-            ->get();
+        $paginatedMedicines = $this->getOptimizedMedicines(
+            $request->input('search'),
+            $request->input('category'),
+            10,
+            (int) $request->input('page', 1)
+        );
+
+        $categories = DB::table('obats')
+            ->whereNull('deleted_at')
+            ->whereNotNull('kategori')
+            ->where('kategori', '!=', '')
+            ->distinct()
+            ->pluck('kategori');
 
         $customers = DB::table('customers')
             ->select('id', 'code', 'name', 'phone', 'membership_level', 'points', 'allergies', 'medical_notes')
@@ -55,11 +64,135 @@ class PosController extends Controller
         $masterShifts = \App\Models\MasterShift::where('is_active', true)->orderBy('start_time', 'asc')->get();
 
         return Inertia::render('Pos/Index', [
-            'medicines' => $medicines,
+            'medicines' => $paginatedMedicines['data'],
+            'pagination' => $paginatedMedicines,
+            'categories' => $categories,
             'customers' => $customers,
             'prescriptions' => $prescriptions,
             'masterShifts' => $masterShifts,
         ]);
+    }
+
+    /**
+     * JSON Endpoint for Live Search & Pagination in POS
+     */
+    public function searchMedicines(Request $request)
+    {
+        $paginated = $this->getOptimizedMedicines(
+            $request->input('search'),
+            $request->input('category'),
+            (int) $request->input('per_page', 10),
+            (int) $request->input('page', 1)
+        );
+
+        return response()->json($paginated);
+    }
+
+    /**
+     * Helper to fetch medicines with batch-loaded unit prices and pagination metadata
+     */
+    private function getOptimizedMedicines(?string $search = null, ?string $category = null, int $perPage = 10, int $page = 1)
+    {
+        $activeOutletId = \App\Services\OutletService::getActiveOutletId();
+
+        $query = DB::table('obats')
+            ->join('product_outlets', function ($join) use ($activeOutletId) {
+                $join->on('obats.kode', '=', 'product_outlets.obat_id')
+                     ->where('product_outlets.outlet_id', '=', $activeOutletId)
+                     ->where('product_outlets.is_active', '=', true)
+                     ->whereNull('product_outlets.deleted_at');
+            })
+            ->leftJoin('product_stocks', function ($join) use ($activeOutletId) {
+                $join->on('obats.kode', '=', 'product_stocks.obat_id')
+                     ->where('product_stocks.outlet_id', '=', $activeOutletId);
+            })
+            ->select(
+                'obats.kode',
+                'obats.nama',
+                'obats.gambar',
+                'obats.jenis_obat',
+                'obats.kategori',
+                DB::raw('COALESCE(product_outlets.price, obats.harga) as harga'),
+                DB::raw('COALESCE(product_stocks.stock, 0) as stok'),
+                'obats.satuan_dasar_id',
+                'obats.satuan_pembelian_id',
+                'obats.satuan_penjualan_id'
+            )
+            ->whereNull('obats.deleted_at');
+
+        if ($search) {
+            $term = trim($search);
+            $query->where(function ($q) use ($term) {
+                $q->where('obats.nama', 'like', "%{$term}%")
+                  ->orWhere('obats.kode', 'like', "%{$term}%")
+                  ->orWhere('obats.merk', 'like', "%{$term}%");
+            });
+        }
+
+        if ($category) {
+            $query->where('obats.kategori', $category);
+        }
+
+        $total = $query->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = max(1, min($page, $lastPage));
+
+        $offset = ($currentPage - 1) * $perPage;
+
+        // Prioritize items with stock > 0 first, then order by name
+        $medicines = $query->orderByRaw('COALESCE(product_stocks.stock, 0) > 0 DESC')
+            ->orderBy('obats.nama', 'asc')
+            ->offset($offset)
+            ->limit($perPage)
+            ->get();
+
+        if ($medicines->isNotEmpty()) {
+            $kodes = $medicines->pluck('kode')->toArray();
+
+            // 1 Batch query for all product units
+            $unitsByProduct = DB::table('product_units')
+                ->join('units', 'product_units.unit_id', '=', 'units.id')
+                ->whereIn('product_units.product_id', $kodes)
+                ->select('product_units.*', 'units.name as unit_name')
+                ->get()
+                ->groupBy('product_id');
+
+            // 1 Batch query for all selling prices
+            $pricesByProduct = DB::table('product_prices')
+                ->whereIn('product_id', $kodes)
+                ->where('price_type', 'SELLING')
+                ->get()
+                ->groupBy('product_id');
+
+            foreach ($medicines as $med) {
+                $prodUnits = $unitsByProduct->get($med->kode, collect());
+                $prodPrices = $pricesByProduct->get($med->kode, collect());
+
+                $unitPrices = [];
+                foreach ($prodUnits as $pu) {
+                    $priceObj = $prodPrices->firstWhere('unit_id', $pu->unit_id);
+                    $unitPrices[] = [
+                        'unit_id' => $pu->unit_id,
+                        'unit_name' => $pu->unit_name,
+                        'is_selling_unit' => (bool)$pu->is_selling_unit,
+                        'selling_price' => $priceObj ? (float)$priceObj->price : (float)$med->harga,
+                    ];
+                }
+
+                $med->units = $unitPrices;
+                $med->satuan_dasar = $med->jenis_obat;
+            }
+        }
+
+        return [
+            'data' => $medicines->values()->toArray(),
+            'current_page' => $currentPage,
+            'last_page' => $lastPage,
+            'per_page' => $perPage,
+            'total' => $total,
+            'from' => $total > 0 ? $offset + 1 : 0,
+            'to' => min($offset + $perPage, $total),
+        ];
     }
 
     /**
@@ -71,6 +204,8 @@ class PosController extends Controller
             'items' => 'required|array|min:1',
             'items.*.kode' => 'required|exists:obats,kode',
             'items.*.quantity' => 'required|integer|min:1',
+            'items.*.unit_id' => 'nullable|exists:units,id',
+            'items.*.unit_price' => 'nullable|numeric|min:0',
             'customer_id' => 'nullable|exists:customers,id',
             'prescription_id' => 'nullable|exists:prescriptions,id',
             'discount' => 'nullable|numeric|min:0',
@@ -78,6 +213,8 @@ class PosController extends Controller
             'payment_method' => 'required|in:cash,debit,credit,qris,transfer,e-wallet,mixed',
             'paid_amount' => 'required|numeric|min:0',
         ]);
+
+        $conversionService = app(\App\Services\UnitConversionService::class);
 
         DB::beginTransaction();
         try {
@@ -95,26 +232,56 @@ class PosController extends Controller
             $itemsToInsert = [];
 
             foreach ($request->items as $item) {
+                $medKode = $item['kode'];
+                $txQty = (int)$item['quantity'];
+                $unitId = isset($item['unit_id']) ? (int)$item['unit_id'] : null;
+
+                $unitName = null;
+                $conversionFactor = 1.0000;
+                $sellingUnitPrice = (float)($item['unit_price'] ?? $item['harga'] ?? 0);
+                if ($sellingUnitPrice <= 0) {
+                    $dbHarga = DB::table('obats')->where('kode', $medKode)->value('harga');
+                    $sellingUnitPrice = (float)($dbHarga ?? 0);
+                }
+
+                if ($unitId) {
+                    $uObj = \App\Models\Unit::find($unitId);
+                    if ($uObj) $unitName = $uObj->name;
+                    $conversionFactor = $conversionService->getConversionFactor($medKode, $unitId);
+                }
+
+                // Total base stock to deduct from FEFO batches
+                $baseQtyNeeded = (int)ceil($txQty * $conversionFactor);
+
                 // FEFO Stock Deduction
                 $allocatedBatches = FefoService::deductStock(
-                    $item['kode'],
-                    $item['quantity'],
+                    $medKode,
+                    $baseQtyNeeded,
                     $cashierId,
-                    $invoiceNumber
+                    $invoiceNumber,
+                    $unitId,
+                    $unitName,
+                    $txQty,
+                    $conversionFactor
                 );
 
-                foreach ($allocatedBatches as $allocated) {
-                    $itemSubtotal = $allocated['quantity'] * $allocated['sell_price'];
-                    $subtotal += $itemSubtotal;
+                // Line subtotal based on POS transaction unit price
+                $lineSubtotal = $txQty * $sellingUnitPrice;
+                $subtotal += $lineSubtotal;
 
+                foreach ($allocatedBatches as $allocated) {
                     $itemsToInsert[] = [
-                        'medicine_id' => $item['kode'],
+                        'medicine_id' => $medKode,
                         'batch_id' => $allocated['batch_id'],
-                        'quantity' => $allocated['quantity'],
+                        'quantity' => $txQty,
+                        'unit_id' => $unitId,
+                        'unit_name' => $unitName,
+                        'conversion_to_base' => $conversionFactor,
+                        'quantity_base' => $baseQtyNeeded,
                         'buy_price' => $allocated['buy_price'],
-                        'unit_price' => $allocated['sell_price'],
+                        'unit_price' => $sellingUnitPrice,
                         'discount' => 0,
-                        'subtotal' => $itemSubtotal,
+                        'subtotal' => $lineSubtotal,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ];

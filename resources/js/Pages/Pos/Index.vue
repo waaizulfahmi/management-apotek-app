@@ -1,20 +1,102 @@
 <script setup>
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 import RupiahInput from '@/Components/RupiahInput.vue';
-import { ref, computed, watch, onMounted } from 'vue';
-import { usePage, useForm, router } from '@inertiajs/vue3';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { usePage, useForm, router, Link } from '@inertiajs/vue3';
 import axios from 'axios';
-import { showSuccess, showWarning, showError } from '@/Utils/swal';
+import { showSuccess, showWarning, showError, showConfirm } from '@/Utils/swal';
 
 const props = defineProps({
     medicines: Array,
+    pagination: Object,
+    categories: Array,
     customers: Array,
     prescriptions: Array,
     masterShifts: Array,
 });
 
+// DOM Element Refs
+const searchInputRef = ref(null);
+const categorySelectRef = ref(null);
+const customerSelectRef = ref(null);
+const discountInputRef = ref(null);
+const taxInputRef = ref(null);
+const paymentMethodRef = ref(null);
+const paidInputRef = ref(null);
+const inlineQtyInputRef = ref([]);
+
+// Navigation & Focus States
+const searchIndex = ref(0);
+const cartIndex = ref(-1);
+const activeZone = ref('search'); // 'search' | 'cart' | 'customer' | 'payment'
+const showShortcutModal = ref(false);
+const showCancelConfirmModal = ref(false);
+const editingQtyIndex = ref(-1);
+const editingQtyValue = ref(1);
+
 const searchQuery = ref('');
 const selectedCategory = ref('');
+const currentPage = ref(props.pagination?.current_page || 1);
+const paginationMeta = ref(props.pagination || {
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+    from: 0,
+    to: 0,
+});
+const loadedMedicines = ref(props.medicines || []);
+const isSearching = ref(false);
+
+watch(() => props.medicines, (newMeds) => {
+    loadedMedicines.value = newMeds || [];
+    searchIndex.value = 0;
+});
+
+watch(() => props.pagination, (newMeta) => {
+    if (newMeta) paginationMeta.value = newMeta;
+});
+
+let searchTimeout = null;
+const performSearch = (page = 1, silent = false) => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    if (!silent) isSearching.value = true;
+    currentPage.value = page;
+    const delay = silent ? 0 : 200;
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await axios.get(route('pos.search'), {
+                params: {
+                    search: searchQuery.value,
+                    category: selectedCategory.value,
+                    page: page,
+                    per_page: 10,
+                }
+            });
+            loadedMedicines.value = res.data.data || [];
+            paginationMeta.value = res.data;
+            searchIndex.value = 0;
+        } catch (e) {
+            console.error('Failed to search medicines', e);
+        } finally {
+            if (!silent) isSearching.value = false;
+        }
+    }, delay);
+};
+
+const goToPage = (page) => {
+    if (page < 1 || page > paginationMeta.value.last_page || page === currentPage.value) return;
+    performSearch(page);
+};
+
+watch([searchQuery, selectedCategory], () => {
+    searchIndex.value = 0;
+    performSearch(1);
+});
+
+const filteredMedicines = computed(() => {
+    return loadedMedicines.value;
+});
 const cart = ref([]);
 const selectedCustomer = ref('');
 const discount = ref(0);
@@ -24,10 +106,8 @@ const paidAmount = ref(0);
 const isProcessing = ref(false);
 const receiptData = ref(null);
 
-// Confirmation Modal State
 const showConfirmModal = ref(false);
 
-// Auto-select initial master shift matching current time
 const getInitialMasterShift = () => {
     if (!props.masterShifts || props.masterShifts.length === 0) return null;
     const now = new Date();
@@ -43,12 +123,11 @@ const getInitialMasterShift = () => {
         }
     });
 
-    return matched ? matched : props.masterShifts[0];
+    return matched || props.masterShifts[0];
 };
 
 const initialMasterShift = getInitialMasterShift();
 
-// Active Shift State
 const activeShift = ref(null);
 const showOpenShiftModal = ref(false);
 const openShiftForm = useForm({
@@ -59,24 +138,19 @@ const openShiftForm = useForm({
 });
 
 const selectedMasterShiftInPos = computed(() => {
-    if (!props.masterShifts) return null;
-    return props.masterShifts.find(s => s.id === openShiftForm.master_shift_id);
-});
-
-watch(() => openShiftForm.master_shift_id, (newId) => {
-    const s = props.masterShifts?.find(x => x.id === newId);
-    if (s) {
-        openShiftForm.shift_name = s.name;
-    }
+    if (!props.masterShifts || !openShiftForm.master_shift_id) return null;
+    return props.masterShifts.find(s => s.id == openShiftForm.master_shift_id) || null;
 });
 
 const isPosShiftTimeMismatch = computed(() => {
-    if (!selectedMasterShiftInPos.value) return false;
+    const ms = selectedMasterShiftInPos.value;
+    if (!ms || !ms.start_time || !ms.end_time) return false;
+
     const now = new Date();
     const curStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':00';
 
-    const start = selectedMasterShiftInPos.value.start_time;
-    const end = selectedMasterShiftInPos.value.end_time;
+    const start = ms.start_time;
+    const end = ms.end_time;
 
     if (start <= end) {
         return curStr < start || curStr > end;
@@ -84,6 +158,26 @@ const isPosShiftTimeMismatch = computed(() => {
         return curStr < start && curStr > end;
     }
 });
+
+const submitOpenShift = () => {
+    const ms = selectedMasterShiftInPos.value;
+    if (ms) {
+        openShiftForm.shift_name = ms.name;
+    }
+
+    openShiftForm.post(route('shifts.open'), {
+        onSuccess: () => {
+            showOpenShiftModal.value = false;
+            showSuccess('Shift Berhasil Dibuka!', `Shift ${openShiftForm.shift_name} telah aktif.`);
+            fetchActiveShift();
+            focusSearchInput();
+        },
+        onError: (errors) => {
+            const firstErr = Object.values(errors)[0] || 'Gagal membuka shift.';
+            showError('Gagal Membuka Shift', firstErr);
+        }
+    });
+};
 
 const fetchActiveShift = async () => {
     try {
@@ -94,26 +188,66 @@ const fetchActiveShift = async () => {
     }
 };
 
-const submitOpenShift = () => {
-    openShiftForm.post(route('shifts.open'), {
-        onSuccess: () => {
-            showOpenShiftModal.value = false;
-            fetchActiveShift();
-        }
-    });
+const findMasterShift = (activeS) => {
+    if (!activeS) return null;
+    if (activeS.master_shift) return activeS.master_shift;
+
+    const sName = (activeS.shift_name || '').toLowerCase().trim();
+    if (!props.masterShifts || props.masterShifts.length === 0) return null;
+
+    if (activeS.master_shift_id) {
+        const found = props.masterShifts.find(s => s.id == activeS.master_shift_id);
+        if (found) return found;
+    }
+
+    return props.masterShifts.find(s => {
+        const mName = s.name.toLowerCase().trim();
+        return mName === sName || mName.includes(sName) || sName.includes(mName);
+    }) || null;
 };
 
-// Prescription Selection State
+const isShiftOverdue = computed(() => {
+    if (!activeShift.value) return false;
+
+    const ms = findMasterShift(activeShift.value);
+    if (!ms || !ms.start_time || !ms.end_time) return false;
+
+    const now = new Date();
+    const curStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':00';
+
+    const start = ms.start_time;
+    const end = ms.end_time;
+
+    if (start <= end) {
+        return curStr < start || curStr > end;
+    } else {
+        return curStr < start && curStr > end;
+    }
+});
+
+const shiftOverdueDetails = computed(() => {
+    if (!activeShift.value) return null;
+    const ms = findMasterShift(activeShift.value);
+
+    const now = new Date();
+    const curTimeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+    return {
+        shiftName: activeShift.value.shift_name,
+        masterName: ms ? ms.name : activeShift.value.shift_name,
+        startTime: ms ? ms.start_time.substring(0, 5) : '-',
+        endTime: ms ? ms.end_time.substring(0, 5) : '-',
+        currentTime: curTimeStr,
+    };
+});
+
 const selectedPrescription = ref(null);
 const showPrescriptionModal = ref(false);
 
 const selectPrescription = (rx) => {
     selectedPrescription.value = rx;
-    if (rx.customer_id) {
-        selectedCustomer.value = rx.customer_id;
-    }
+    if (rx.customer_id) selectedCustomer.value = rx.customer_id;
     
-    // Auto-fill cart with items prescribed
     if (rx.items && rx.items.length > 0) {
         cart.value = [];
         rx.items.forEach(item => {
@@ -128,46 +262,466 @@ const selectPrescription = (rx) => {
         });
     }
 
-    showSuccess(
-        'Resep Dokter Dimuat!',
-        `Resep ${rx.prescription_number} (${rx.patient_name || 'Pasien Umum'}) berhasil dihubungkan ke Keranjang Kasir!`
-    );
+    showSuccess('Resep Dokter Dimuat!', `Resep ${rx.prescription_number} berhasil dihubungkan.`);
     showPrescriptionModal.value = false;
+    focusSearchInput();
 };
 
 const clearPrescription = () => {
     selectedPrescription.value = null;
-    showWarning('Resep Dilepas', 'Transaksi dialihkan kembali ke Penjualan Bebas (Tanpa Resep).');
+    showWarning('Resep Dilepas', 'Transaksi dialihkan ke Penjualan Bebas.');
 };
+
+// =========================================================
+// KEYBOARD SHORTCUTS & FOCUS MANAGEMENT HELPER METHODS
+// =========================================================
+
+const focusSearchInput = () => {
+    activeZone.value = 'search';
+    nextTick(() => {
+        if (searchInputRef.value) {
+            searchInputRef.value.focus();
+            searchInputRef.value.select?.();
+        }
+    });
+};
+
+const focusCart = () => {
+    if (cart.value.length > 0) {
+        activeZone.value = 'cart';
+        if (cartIndex.value < 0 || cartIndex.value >= cart.value.length) {
+            cartIndex.value = 0;
+        }
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
+    } else {
+        showWarning('Keranjang Kosong', 'Tambahkan produk ke keranjang terlebih dahulu (F1).');
+        focusSearchInput();
+    }
+};
+
+const focusPayment = () => {
+    activeZone.value = 'payment';
+    nextTick(() => {
+        if (paidInputRef.value) {
+            paidInputRef.value.focus();
+            paidInputRef.value.select?.();
+        }
+    });
+};
+
+const scrollToSearchItem = (idx) => {
+    const listEl = document.querySelector('.pos-medicine-list');
+    const items = listEl?.querySelectorAll('.pos-item-row');
+    if (items && items[idx]) {
+        items[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+};
+
+const handleSearchEnter = () => {
+    if (!loadedMedicines.value || loadedMedicines.value.length === 0) return;
+
+    const trimmedQuery = searchQuery.value.trim().toLowerCase();
+    
+    // Check exact barcode or code match first (for barcode scanner)
+    const exactMatch = loadedMedicines.value.find(m => 
+        (m.kode && m.kode.toLowerCase() === trimmedQuery) ||
+        (m.barcode && m.barcode.toLowerCase() === trimmedQuery)
+    );
+
+    let targetMedicine = null;
+    if (exactMatch) {
+        targetMedicine = exactMatch;
+    } else if (searchIndex.value >= 0 && searchIndex.value < loadedMedicines.value.length) {
+        targetMedicine = loadedMedicines.value[searchIndex.value];
+    } else if (loadedMedicines.value.length === 1) {
+        targetMedicine = loadedMedicines.value[0];
+    }
+
+    if (targetMedicine) {
+        addToCart(targetMedicine);
+        searchQuery.value = '';
+        searchIndex.value = 0;
+    }
+};
+
+const startEditCartQty = (idx) => {
+    editingQtyIndex.value = idx;
+    editingQtyValue.value = cart.value[idx].quantity;
+    activeZone.value = 'cart';
+    nextTick(() => {
+        if (inlineQtyInputRef.value && inlineQtyInputRef.value[0]) {
+            inlineQtyInputRef.value[0].focus();
+            inlineQtyInputRef.value[0].select();
+        }
+    });
+};
+
+const saveCartQty = (idx) => {
+    if (editingQtyIndex.value === -1) return;
+    const val = Number(editingQtyValue.value);
+    if (isNaN(val) || val <= 0) {
+        removeCartItem(idx);
+    } else {
+        const item = cart.value[idx];
+        if (val > item.maxStok) {
+            showWarning('Stok Tidak Cukup!', `Stok ${item.nama} hanya tersisa ${item.maxStok} unit.`);
+            item.quantity = item.maxStok;
+        } else {
+            item.quantity = val;
+        }
+    }
+    editingQtyIndex.value = -1;
+    activeZone.value = 'cart';
+};
+
+const cancelEditCartQty = () => {
+    editingQtyIndex.value = -1;
+    activeZone.value = 'cart';
+};
+
+const removeCartItem = (idx) => {
+    cart.value.splice(idx, 1);
+    if (cart.value.length === 0) {
+        cartIndex.value = -1;
+        focusSearchInput();
+    } else {
+        cartIndex.value = Math.min(idx, cart.value.length - 1);
+        activeZone.value = 'cart';
+    }
+};
+
+const promptCancelTransaction = () => {
+    if (cart.value.length === 0) return;
+    showCancelConfirmModal.value = true;
+};
+
+const cancelTransactionConfirmed = () => {
+    showCancelConfirmModal.value = false;
+    cart.value = [];
+    selectedCustomer.value = '';
+    selectedPrescription.value = null;
+    discount.value = 0;
+    taxPercent.value = 0;
+    paidAmount.value = 0;
+    showSuccess('Transaksi Dibatalkan', 'Seluruh item keranjang telah dibersihkan.');
+    focusSearchInput();
+};
+
+const resetTransaction = () => {
+    cart.value = [];
+    selectedCustomer.value = '';
+    selectedPrescription.value = null;
+    discount.value = 0;
+    taxPercent.value = 0;
+    paidAmount.value = 0;
+    searchQuery.value = '';
+    searchIndex.value = 0;
+    cartIndex.value = -1;
+    showConfirmModal.value = false;
+    showCancelConfirmModal.value = false;
+    showShortcutModal.value = false;
+    focusSearchInput();
+};
+
+const closeReceiptModal = () => {
+    const modalEl = document.getElementById('receiptModal');
+    if (modalEl) {
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+    }
+};
+
+const isEditingText = (e) => {
+    const activeEl = document.activeElement;
+    if (!activeEl) return false;
+    const tag = activeEl.tagName.toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        if (activeEl === searchInputRef.value && activeZone.value === 'search') return false;
+        return true;
+    }
+    return false;
+};
+
+const handleGlobalKeydown = (e) => {
+    // 1. Receipt Modal Key Handling
+    const receiptModalEl = document.getElementById('receiptModal');
+    const isReceiptModalOpen = receiptModalEl && receiptModalEl.classList.contains('show');
+    if (isReceiptModalOpen) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            printReceipt();
+        } else if (e.key === 'Escape' || e.key.toLowerCase() === 'n' || (e.ctrlKey && e.key.toLowerCase() === 'n')) {
+            e.preventDefault();
+            closeReceiptModal();
+            resetTransaction();
+        }
+        return;
+    }
+
+    // 2. Shortcut Modal Handling
+    if (showShortcutModal.value) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            showShortcutModal.value = false;
+            focusSearchInput();
+        }
+        return;
+    }
+
+    // 3. Cancel Confirmation Modal Handling
+    if (showCancelConfirmModal.value) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            showCancelConfirmModal.value = false;
+            focusSearchInput();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            cancelTransactionConfirmed();
+        }
+        return;
+    }
+
+    // 4. Final Transaction Confirmation Modal Handling
+    if (showConfirmModal.value) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            showConfirmModal.value = false;
+            focusSearchInput();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            executeFinalCheckout();
+        }
+        return;
+    }
+
+    // 5. Open Shift or Prescription Modal
+    if (showOpenShiftModal.value || showPrescriptionModal.value) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            showOpenShiftModal.value = false;
+            showPrescriptionModal.value = false;
+            focusSearchInput();
+        }
+        return;
+    }
+
+    // 6. Global Ctrl Shortcuts
+    if (e.ctrlKey && e.shiftKey && e.key.toUpperCase() === 'X') {
+        e.preventDefault();
+        promptCancelTransaction();
+        return;
+    }
+
+    if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        resetTransaction();
+        return;
+    }
+
+    if ((e.ctrlKey && e.key === '/') || (e.key === '?' && !isEditingText(e))) {
+        e.preventDefault();
+        showShortcutModal.value = !showShortcutModal.value;
+        return;
+    }
+
+    // 7. Function Keys: F1 - F10 & Quick Cash Shortcuts
+    if (e.key === 'F7' || (e.altKey && (e.key.toLowerCase() === 'p' || e.key.toLowerCase() === 'u'))) {
+        e.preventDefault();
+        paidAmount.value = grandTotal.value;
+        focusPayment();
+        return;
+    }
+
+    if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        paidAmount.value = 20000;
+        focusPayment();
+        return;
+    }
+
+    if (e.altKey && e.key === '5') {
+        e.preventDefault();
+        paidAmount.value = 50000;
+        focusPayment();
+        return;
+    }
+
+    if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        paidAmount.value = 100000;
+        focusPayment();
+        return;
+    }
+
+    if (e.key === 'F1') {
+        e.preventDefault();
+        focusSearchInput();
+        return;
+    }
+
+    if (e.key === 'F2') {
+        e.preventDefault();
+        focusCart();
+        return;
+    }
+
+    if (e.key === 'F3') {
+        e.preventDefault();
+        activeZone.value = 'customer';
+        customerSelectRef.value?.focus();
+        return;
+    }
+
+    if (e.key === 'F4') {
+        e.preventDefault();
+        activeZone.value = 'payment';
+        paymentMethodRef.value?.focus();
+        return;
+    }
+
+    if (e.key === 'F6') {
+        e.preventDefault();
+        activeZone.value = 'payment';
+        discountInputRef.value?.focus();
+        discountInputRef.value?.select();
+        return;
+    }
+
+    if (e.key === 'F8' || e.key === 'F9') {
+        e.preventDefault();
+        promptCheckoutConfirmation();
+        return;
+    }
+
+    if (e.key === 'F10') {
+        e.preventDefault();
+        if (showConfirmModal.value) {
+            executeFinalCheckout();
+        } else {
+            promptCheckoutConfirmation();
+        }
+        return;
+    }
+
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        if (searchQuery.value) {
+            searchQuery.value = '';
+        }
+        focusSearchInput();
+        return;
+    }
+
+    const isInput = isEditingText(e);
+
+    // Number keys 1-4 for quick payment method selection when focus is in payment zone
+    if (!isInput && ['1', '2', '3', '4'].includes(e.key) && (activeZone.value === 'payment' || document.activeElement === paymentMethodRef.value)) {
+        if (e.key === '1') paymentMethod.value = 'cash';
+        if (e.key === '2') paymentMethod.value = 'qris';
+        if (e.key === '3') paymentMethod.value = 'debit';
+        if (e.key === '4') paymentMethod.value = 'transfer';
+        return;
+    }
+
+    // 8. Navigation in Search vs Cart
+    if (activeZone.value === 'cart') {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (cart.value.length > 0) {
+                cartIndex.value = Math.min(cartIndex.value + 1, cart.value.length - 1);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (cart.value.length > 0) {
+                cartIndex.value = Math.max(cartIndex.value - 1, 0);
+            }
+        } else if (e.key === 'Delete') {
+            e.preventDefault();
+            if (cartIndex.value >= 0 && cartIndex.value < cart.value.length) {
+                removeCartItem(cartIndex.value);
+            }
+        } else if (e.key === '+' || e.key === '=' || (e.ctrlKey && e.key === '=')) {
+            e.preventDefault();
+            if (cartIndex.value >= 0 && cartIndex.value < cart.value.length) {
+                updateQty(cart.value[cartIndex.value], 1);
+            }
+        } else if (e.key === '-' || (e.ctrlKey && e.key === '-')) {
+            e.preventDefault();
+            if (cartIndex.value >= 0 && cartIndex.value < cart.value.length) {
+                updateQty(cart.value[cartIndex.value], -1);
+            }
+        } else if (e.key === 'Enter' && editingQtyIndex.value === -1) {
+            e.preventDefault();
+            if (cartIndex.value >= 0 && cartIndex.value < cart.value.length) {
+                startEditCartQty(cartIndex.value);
+            }
+        }
+    } else if (activeZone.value === 'search' || document.activeElement === searchInputRef.value) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (loadedMedicines.value.length > 0) {
+                if (searchIndex.value < loadedMedicines.value.length - 1) {
+                    searchIndex.value++;
+                } else {
+                    searchIndex.value = 0;
+                }
+                scrollToSearchItem(searchIndex.value);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (loadedMedicines.value.length > 0) {
+                if (searchIndex.value > 0) {
+                    searchIndex.value--;
+                } else {
+                    searchIndex.value = loadedMedicines.value.length - 1;
+                }
+                scrollToSearchItem(searchIndex.value);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSearchEnter();
+        }
+    }
+};
+
+let stockPollInterval = null;
 
 onMounted(() => {
     fetchActiveShift();
 
-    // Auto-select prescription if rx_id query parameter is present in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const rxIdParam = urlParams.get('rx_id');
-    if (rxIdParam && props.prescriptions) {
-        const foundRx = props.prescriptions.find(r => r.id == rxIdParam);
-        if (foundRx) {
-            selectPrescription(foundRx);
-        }
-    }
-});
+    // Focus product search input automatically on open
+    focusSearchInput();
 
-const filteredMedicines = computed(() => {
-    return props.medicines.filter(m => {
-        const matchesSearch = m.nama.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
-                              m.kode.toLowerCase().includes(searchQuery.value.toLowerCase());
-        const matchesCat = !selectedCategory.value || m.kategori === selectedCategory.value;
-        return matchesSearch && matchesCat;
+    // Global Keydown Listener
+    window.addEventListener('keydown', handleGlobalKeydown);
+
+    // Auto-refresh stock numbers silently in background every 6 seconds
+    stockPollInterval = setInterval(() => {
+        performSearch(currentPage.value, true);
+    }, 6000);
+
+    // Auto-refresh when tab window comes back to focus
+    window.addEventListener('focus', () => {
+        performSearch(currentPage.value, true);
     });
 });
 
+onUnmounted(() => {
+    if (stockPollInterval) clearInterval(stockPollInterval);
+    window.removeEventListener('keydown', handleGlobalKeydown);
+});
+
 const addToCart = (medicine) => {
+    if (medicine.stok <= 0) {
+        showWarning('Stok Kosong!', `Stok ${medicine.nama} kosong.`);
+        return;
+    }
     const existing = cart.value.find(item => item.kode === medicine.kode);
     if (existing) {
         if (existing.quantity + 1 > medicine.stok) {
-            showWarning('Stok Tidak Cukup!', `Stok ${medicine.nama} hanya tersisa ${medicine.stok} unit.`);
+            showWarning('Stok Tidak Cukup!', `Tersisa ${medicine.stok} unit.`);
             return;
         }
         existing.quantity += 1;
@@ -175,10 +729,30 @@ const addToCart = (medicine) => {
         cart.value.push({
             kode: medicine.kode,
             nama: medicine.nama,
-            harga: Number(medicine.harga),
+            units: medicine.units || [],
+            unit_id: medicine.units?.find(u => u.is_selling_unit)?.unit_id || null,
+            unit_name: medicine.units?.find(u => u.is_selling_unit)?.unit_name || medicine.jenis_obat,
+            harga: Number(medicine.units?.find(u => u.is_selling_unit)?.selling_price || medicine.harga),
             quantity: 1,
             maxStok: medicine.stok,
         });
+    }
+
+    const addedIdx = cart.value.findIndex(i => i.kode === medicine.kode);
+    if (addedIdx !== -1) {
+        cartIndex.value = addedIdx;
+    }
+
+    // Refocus search input for instant continuous scanning/typing
+    focusSearchInput();
+};
+
+const changeCartUnit = (item, newUnitId) => {
+    const u = item.units.find(x => x.unit_id == newUnitId);
+    if (u) {
+        item.unit_id = u.unit_id;
+        item.unit_name = u.unit_name;
+        item.harga = Number(u.selling_price);
     }
 };
 
@@ -186,15 +760,28 @@ const updateQty = (item, delta) => {
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
         cart.value = cart.value.filter(i => i.kode !== item.kode);
+        if (cart.value.length === 0) {
+            cartIndex.value = -1;
+            focusSearchInput();
+        } else {
+            cartIndex.value = Math.min(cartIndex.value, cart.value.length - 1);
+            activeZone.value = 'cart';
+        }
     } else if (newQty > item.maxStok) {
-        showWarning('Stok Maksimal!', `Stok obat ini hanya tersisa ${item.maxStok} unit.`);
+        showWarning('Stok Tidak Cukup!', `Stok ${item.nama} hanya tersisa ${item.maxStok} unit.`);
     } else {
         item.quantity = newQty;
+        activeZone.value = 'cart';
     }
 };
 
+const selectedCustomerDetails = computed(() => {
+    if (!selectedCustomer.value) return null;
+    return props.customers.find(c => c.id === selectedCustomer.value);
+});
+
 const subtotal = computed(() => {
-    return cart.value.reduce((sum, item) => sum + (item.harga * item.quantity), 0);
+    return cart.value.reduce((acc, item) => acc + (item.harga * item.quantity), 0);
 });
 
 const taxAmount = computed(() => {
@@ -202,137 +789,150 @@ const taxAmount = computed(() => {
 });
 
 const grandTotal = computed(() => {
-    return Math.max(0, (subtotal.value - discount.value) + taxAmount.value);
+    const total = subtotal.value - discount.value + taxAmount.value;
+    return total > 0 ? total : 0;
 });
 
 const changeAmount = computed(() => {
-    return Math.max(0, paidAmount.value - grandTotal.value);
+    return paidAmount.value - grandTotal.value;
 });
 
-const selectedCustomerDetails = computed(() => {
-    if (!selectedCustomer.value) return null;
-    return props.customers.find(c => c.id == selectedCustomer.value) || null;
-});
+const formatCurrency = (val) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val || 0);
+};
 
-const handleCheckout = () => {
+const promptCheckoutConfirmation = async () => {
     if (!activeShift.value) {
-        showWarning('Shift Belum Dibuka!', 'Shift belum dibuka. Silakan buka shift terlebih dahulu.');
+        showWarning('Shift Belum Dibuka!', 'Harap buka Shift Kasir terlebih dahulu.');
         showOpenShiftModal.value = true;
         return;
     }
+
     if (cart.value.length === 0) {
-        showWarning('Keranjang Kosong!', 'Tambahkan minimal 1 obat ke keranjang belanja.');
-        return;
-    }
-    if (paidAmount.value < grandTotal.value) {
-        showWarning('Pembayaran Kurang!', 'Jumlah uang pembayaran kurang dari total belanja.');
+        showWarning('Keranjang Kosong', 'Harap pilih minimal 1 produk obat (F1).');
+        focusSearchInput();
         return;
     }
 
-    // Open Confirmation Modal
+    if (paidAmount.value < grandTotal.value && paymentMethod.value === 'cash') {
+        showWarning('Uang Pembayaran Kurang', `Nominal bayar (${formatCurrency(paidAmount.value)}) kurang dari total belanja (${formatCurrency(grandTotal.value)}).`);
+        focusPayment();
+        return;
+    }
+
+    if (selectedCustomerDetails.value && selectedCustomerDetails.value.allergies) {
+        const allergies = selectedCustomerDetails.value.allergies.toLowerCase();
+        const allergicItems = cart.value.filter(item => allergies.includes(item.nama.toLowerCase()));
+        if (allergicItems.length > 0) {
+            showError('PERINGATAN ALERGI!', `Pasien memiliki riwayat alergi terhadap obat dalam transaksi ini.`);
+            return;
+        }
+    }
+
+    if (isShiftOverdue.value && shiftOverdueDetails.value) {
+        const confirmOverdue = await showConfirm(
+            'PERINGATAN SHIFT MELEWATI JAM OPERASIONAL!',
+            `Shift ${shiftOverdueDetails.value.shiftName} (${shiftOverdueDetails.value.startTime} - ${shiftOverdueDetails.value.endTime}) saat ini telah melebih batas jam operasional. Jam Sekarang: ${shiftOverdueDetails.value.currentTime}.\n\nApakah Anda yakin tetap ingin melanjutkan transaksi pada shift ini?`
+        );
+        if (!confirmOverdue) return;
+    }
+
     showConfirmModal.value = true;
 };
 
-const executeFinalCheckout = async () => {
+const executeCheckout = async () => {
     showConfirmModal.value = false;
     isProcessing.value = true;
+
     try {
-        const payload = {
-            items: cart.value,
+        const payloadItems = cart.value.map(item => ({
+            kode: item.kode,
+            nama: item.nama,
+            quantity: item.quantity,
+            unit_id: item.unit_id || null,
+            unit_price: item.harga,
+            harga: item.harga,
+        }));
+
+        const response = await axios.post(route('pos.checkout'), {
+            items: payloadItems,
             customer_id: selectedCustomer.value || null,
             prescription_id: selectedPrescription.value ? selectedPrescription.value.id : null,
             discount: discount.value,
             tax: taxAmount.value,
             payment_method: paymentMethod.value,
             paid_amount: paidAmount.value,
-        };
+        });
 
-        const res = await axios.post(route('pos.checkout'), payload);
-        if (res.data.success) {
-            const invoiceNumber = res.data.data.invoice_number;
+        if (response.data.success || response.data.status === 'success') {
+            const resData = response.data.data || response.data.receipt;
+
             receiptData.value = {
-                invoice_number: invoiceNumber,
-                items: [...cart.value],
+                invoice_number: resData.invoice_number,
+                items: cart.value.map(i => ({ ...i })),
                 subtotal: subtotal.value,
                 discount: discount.value,
                 tax: taxAmount.value,
-                grand_total: res.data.data.grand_total,
-                paid_amount: res.data.data.paid_amount,
-                change_amount: res.data.data.change_amount,
+                grand_total: resData.grand_total,
+                paid_amount: resData.paid_amount,
+                change_amount: resData.change_amount,
                 payment_method: paymentMethod.value,
                 date: new Date().toLocaleString('id-ID'),
             };
 
-            // Reset cart & inputs
+            showSuccess('Transaksi Berhasil!', `Struk ${resData.invoice_number} telah berhasil diterbitkan.`, 1500);
+            
+            // Clear cart & state
             cart.value = [];
-            paidAmount.value = 0;
-            discount.value = 0;
+            selectedCustomer.value = '';
             selectedPrescription.value = null;
+            discount.value = 0;
+            taxPercent.value = 0;
+            paidAmount.value = 0;
+            searchQuery.value = '';
+            searchIndex.value = 0;
+            cartIndex.value = -1;
 
-            // Alert Penjualan Berhasil
-            await showSuccess(
-                'Penjualan Berhasil!',
-                `Transaksi telah berhasil diproses dengan Nomor Invoice: ${invoiceNumber}`
-            );
+            // Realtime Stock Reload
+            performSearch(currentPage.value, true);
 
-            // Open Receipt Modal
-            const modal = new bootstrap.Modal(document.getElementById('receiptModal'));
-            modal.show();
+            setTimeout(() => {
+                const modalEl = document.getElementById('receiptModal');
+                if (modalEl) {
+                    const modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                }
+            }, 1500);
         }
     } catch (err) {
-        showError('Gagal Checkout!', err.response?.data?.message || 'Gagal memproses transaksi kasir.');
+        showError('Transaksi Gagal', err.response?.data?.message || 'Terjadi kesalahan sistem.');
     } finally {
         isProcessing.value = false;
     }
 };
 
-const formatCurrency = (val) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val || 0);
-};
+const executeFinalCheckout = executeCheckout;
 
 const printReceipt = () => {
-    const printEl = document.getElementById('printableReceipt');
-    if (!printEl) return;
-
-    const printContents = printEl.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    const printContents = document.getElementById('printableReceipt').innerHTML;
+    const printWindow = window.open('', '_blank', 'height=600,width=400');
     
-    printWindow.document.write('<!DOCTYPE html><html><head><title>Struk Pembayaran Apotek</title>');
+    printWindow.document.write('<html><head><title>Struk Pembayaran</title>');
     printWindow.document.write('<style>');
     printWindow.document.write(`
-        @page { size: 80mm auto; margin: 0; }
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 76mm;
-            margin: 0 auto;
-            padding: 8px;
-            font-size: 12px;
-            color: #000;
-            background: #fff;
-        }
+        body { font-family: 'Courier New', Courier, monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; }
         .text-center { text-align: center; }
+        .text-end { text-align: right; }
         .fw-bold { font-weight: bold; }
-        .small { font-size: 11px; }
         .d-flex { display: flex; }
         .justify-content-between { justify-content: space-between; }
         .border-dashed { border-top: 1px dashed #000; }
-        .my-1 { margin-top: 4px; margin-bottom: 4px; }
-        .mb-0 { margin-bottom: 0; }
-        .mb-2 { margin-bottom: 6px; }
-        .mt-2 { margin-top: 8px; }
-        .d-block { display: block; }
     `);
     printWindow.document.write('</style></head><body>');
     printWindow.document.write(printContents);
     printWindow.document.write('</body></html>');
-    
     printWindow.document.close();
-    printWindow.focus();
-    
-    setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-    }, 300);
+    printWindow.print();
 };
 </script>
 
@@ -341,45 +941,193 @@ const printReceipt = () => {
         <section class="mt-4 me-4 ms-4">
             <div class="content mt-4">
                 <div class="row">
-                    <!-- Left Column: Product Selection & Filter -->
                     <div class="col-md-7">
                         <div class="card border-0 shadow-sm p-3 mb-3" style="border-radius: 12px;">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="d-flex align-items-center gap-2">
                                     <h4 class="fw-bold mb-0 text-dark"><i class="bx bx-store me-2 text-primary"></i>Kasir / POS</h4>
-                                    <Link v-if="activeShift" :href="route('shifts.show', activeShift.id)" class="badge bg-success font-monospace text-decoration-none p-2">
-                                        <i class="bx bx-check-circle me-1"></i> Shift: {{ activeShift.shift_name }}
+                                    <Link 
+                                        v-if="activeShift" 
+                                        :href="route('shifts.show', activeShift.id)" 
+                                        :class="isShiftOverdue ? 'badge bg-danger text-white font-monospace text-decoration-none p-2 animate-pulse shadow-xs' : 'badge bg-success font-monospace text-decoration-none p-2'"
+                                        :title="isShiftOverdue ? 'Peringatan: Shift ini sudah melebih jam operasional! Klik untuk melihat detail shift' : 'Shift Aktif'"
+                                    >
+                                        <i :class="isShiftOverdue ? 'bx bx-time-five me-1' : 'bx bx-check-circle me-1'"></i> 
+                                        Shift: {{ activeShift.shift_name }} {{ isShiftOverdue ? '(Melewati Jam!)' : '' }}
                                     </Link>
                                     <span v-else class="badge bg-warning text-dark font-monospace p-2" @click="showOpenShiftModal = true" style="cursor: pointer;">
                                         <i class="bx bx-error me-1"></i> Shift Belum Dibuka (Buka)
                                     </span>
                                 </div>
-                                <div class="d-flex gap-2">
-                                    <input type="text" class="form-control" v-model="searchQuery" placeholder="Scan Barcode / Cari Obat...">
+                                <button type="button" class="btn btn-sm btn-outline-dark fw-bold rounded-pill shadow-xs" @click="showShortcutModal = true">
+                                    <i class="bx bx-kbd me-1 text-primary"></i> ? Shortcut <span class="badge bg-secondary text-white ms-1 font-monospace">Ctrl+/</span>
+                                </button>
+                            </div>
+
+                            <!-- Compact Running Text Shift Overdue Alert Bar -->
+                            <div v-if="isShiftOverdue && shiftOverdueDetails" class="alert alert-danger py-1.5 px-3 mb-3 rounded-3 d-flex align-items-center justify-content-between shadow-xs overflow-hidden" style="border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); height: 38px;">
+                                <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden me-2" style="min-width: 0;">
+                                    <span class="badge bg-danger text-white flex-shrink-0 font-monospace fw-bold px-2 py-1" style="font-size: 0.72rem;">
+                                        <i class="bx bx-time-five me-1"></i> OVERDUE
+                                    </span>
+                                    <marquee behavior="scroll" direction="left" scrollamount="5" class="small fw-bold text-danger mb-0 flex-grow-1" style="font-size: 0.85rem;">
+                                        ⚠️ PERINGATAN SHIFT KASIR MELEWATI JAM OPERASIONAL: Shift aktif "{{ shiftOverdueDetails.shiftName }}" (Jam Operasional: {{ shiftOverdueDetails.startTime }} - {{ shiftOverdueDetails.endTime }}) telah melebih batas waktu operasional (Jam Sekarang: {{ shiftOverdueDetails.currentTime }}). Disarankan untuk segera menutup shift ini dan membuka shift baru!
+                                    </marquee>
+                                </div>
+                                <Link :href="route('shifts.show', activeShift.id)" class="btn btn-sm btn-danger fw-bold rounded-pill flex-shrink-0 px-3 py-0 fs-7 shadow-xs" style="line-height: 24px;">
+                                    <i class="bx bx-log-out me-1"></i> Tutup Shift
+                                </Link>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-8 position-relative">
+                                    <input 
+                                        ref="searchInputRef"
+                                        type="text" 
+                                        class="form-control ps-4 pe-5 rounded-3 shadow-xs pos-input-field" 
+                                        v-model="searchQuery" 
+                                        placeholder="[F1] Scan Barcode / Cari Nama, Kode Obat... (↑↓ Navigate | Enter: Pilih)"
+                                        style="height: 42px;"
+                                        @focus="activeZone = 'search'"
+                                    >
+                                    <span class="position-absolute top-50 end-0 translate-middle-y me-3 pointer-events-none">
+                                        <i v-if="isSearching" class="bx bx-loader-alt bx-spin text-primary fs-5"></i>
+                                        <i v-else class="bx bx-barcode-reader text-primary fs-4"></i>
+                                    </span>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <select ref="categorySelectRef" class="form-select rounded-3 shadow-xs" v-model="selectedCategory" style="height: 42px;">
+                                        <option value="">Semua Kategori</option>
+                                        <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+                                    </select>
                                 </div>
                             </div>
 
-                            <!-- Medicine Cards Grid -->
-                            <div class="row g-3" style="max-height: 520px; overflow-y: auto;">
-                                <div class="col-md-4" v-for="med in filteredMedicines" :key="med.kode">
-                                    <div class="card h-100 border shadow-xs text-center p-2 product-card" @click="addToCart(med)" style="cursor: pointer; border-radius: 10px; transition: transform 0.2s;">
-                                        <img :src="`/Assets/Obat/${med.gambar}`" @error="(e) => e.target.src = '/Assets/img/default-medicine.png'" alt="obat" class="img-fluid mb-2 rounded shadow-xs" style="height: 90px; object-fit: cover; width: 100%;">
-                                        <h6 class="fw-bold mb-1 text-truncate" style="font-size: 0.9rem;">{{ med.nama }}</h6>
-                                        <p class="text-muted mb-1 small">{{ med.kode }} | Stok: <span class="badge bg-info">{{ med.stok }}</span></p>
-                                        <span class="fw-bold text-primary">{{ formatCurrency(med.harga) }}</span>
+                            <div class="card border border-secondary border-opacity-25 shadow-xs overflow-hidden mb-2" style="border-radius: 10px; min-height: 450px;">
+                                
+                                <div v-if="isSearching" class="p-2">
+                                    <div v-for="n in 6" :key="n" class="d-flex align-items-center justify-content-between p-3 mb-2 rounded border bg-light animate-pulse">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="rounded-3" style="width: 44px; height: 44px; background: #cbd5e1;"></div>
+                                            <div>
+                                                <div class="rounded mb-2" style="width: 180px; height: 14px; background: #cbd5e1;"></div>
+                                                <div class="rounded" style="width: 110px; height: 10px; background: #e2e8f0;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="rounded" style="width: 80px; height: 16px; background: #cbd5e1;"></div>
+                                            <div class="rounded-pill" style="width: 85px; height: 32px; background: #94a3b8;"></div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div v-if="filteredMedicines.length === 0" class="col-12 text-center py-5 text-muted">
-                                    Obat tidak ditemukan.
+
+                                <div v-else-if="loadedMedicines.length > 0" class="list-group list-group-flush pos-medicine-list" style="max-height: 480px; overflow-y: auto;">
+                                    <div 
+                                        v-for="(med, idx) in loadedMedicines" 
+                                        :key="med.kode" 
+                                        class="list-group-item list-group-item-action d-flex align-items-center justify-content-between p-3 border-bottom pos-item-row"
+                                        :class="{ 'active-search-item bg-primary bg-opacity-10 border-start border-primary border-4 shadow-xs': searchIndex === idx && activeZone === 'search' }"
+                                        @click="addToCart(med)"
+                                        @mouseenter="searchIndex = idx"
+                                        style="cursor: pointer; transition: all 0.12s ease-in-out;"
+                                    >
+                                        <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+                                            <img 
+                                                :src="`/Assets/Obat/${med.gambar}`" 
+                                                @error="(e) => e.target.src = '/Assets/img/default-medicine.png'" 
+                                                alt="obat" 
+                                                class="rounded shadow-xs border flex-shrink-0" 
+                                                style="width: 44px; height: 44px; object-fit: cover;"
+                                            >
+                                            <div class="text-truncate">
+                                                <h6 class="fw-bold mb-1 text-truncate" style="font-size: 0.92rem;">
+                                                    {{ med.nama }}
+                                                    <span v-if="searchIndex === idx && activeZone === 'search'" class="badge bg-primary text-white ms-2 font-monospace" style="font-size: 0.68rem;">
+                                                        <i class="bx bx-corner-down-left me-1"></i>Enter: Tambah
+                                                    </span>
+                                                </h6>
+                                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                    <span class="badge bg-secondary text-white font-monospace" style="font-size: 0.75rem;">
+                                                        {{ med.kode }}
+                                                    </span>
+                                                    <span v-if="med.kategori" class="badge bg-primary text-white" style="font-size: 0.72rem;">
+                                                        {{ med.kategori }}
+                                                    </span>
+                                                    <span :class="med.stok > 0 ? 'badge bg-info text-dark font-monospace fw-bold' : 'badge bg-danger text-white font-monospace fw-bold'" style="font-size: 0.75rem;">
+                                                        Stok: {{ med.stok }} {{ med.jenis_obat || 'Unit' }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex align-items-center gap-3 ms-2 flex-shrink-0">
+                                            <div class="text-end">
+                                                <div class="fw-bold text-success fs-6">{{ formatCurrency(med.harga) }}</div>
+                                                <small class="text-muted" style="font-size: 0.75rem;">/ {{ med.jenis_obat || 'Unit' }}</small>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                class="btn btn-sm px-3 rounded-pill fw-semibold shadow-xs"
+                                                :class="searchIndex === idx && activeZone === 'search' ? 'btn-primary shadow' : (med.stok > 0 ? 'btn-outline-primary' : 'btn-outline-secondary')"
+                                                @click.stop="addToCart(med)"
+                                            >
+                                                <i class="bx bx-plus me-1"></i> Tambah
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                <div v-else class="text-center py-5 text-muted">
+                                    <i class="bx bx-search-alt fs-1 mb-2 text-secondary"></i>
+                                    <h6 class="fw-semibold">Obat Tidak Ditemukan</h6>
+                                    <p class="small text-muted mb-0">Coba kata kunci lain atau ubah filter kategori.</p>
+                                </div>
+                            </div>
+
+                            <div v-if="paginationMeta && paginationMeta.last_page > 1" class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-2 pt-2">
+                                <div class="small text-muted fw-semibold">
+                                    Halaman <strong>{{ paginationMeta.current_page }}</strong> dari <strong>{{ paginationMeta.last_page }}</strong> (Total <strong>{{ paginationMeta.total }}</strong> Obat)
+                                </div>
+                                <nav>
+                                    <ul class="pagination pagination-sm mb-0">
+                                        <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                                            <button class="page-link" @click="goToPage(1)" title="Halaman Pertama">««</button>
+                                        </li>
+                                        <li class="page-item" :class="{ disabled: currentPage === 1 }">
+                                            <button class="page-link" @click="goToPage(currentPage - 1)">‹ Prev</button>
+                                        </li>
+                                        <li class="page-item active">
+                                            <span class="page-link px-3 font-monospace fw-bold">
+                                                {{ currentPage }}
+                                            </span>
+                                        </li>
+                                        <li class="page-item" :class="{ disabled: currentPage === paginationMeta.last_page }">
+                                            <button class="page-link" @click="goToPage(currentPage + 1)">Next ›</button>
+                                        </li>
+                                        <li class="page-item" :class="{ disabled: currentPage === paginationMeta.last_page }">
+                                            <button class="page-link" @click="goToPage(paginationMeta.last_page)" title="Halaman Terakhir">»»</button>
+                                        </li>
+                                    </ul>
+                                </nav>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Right Column: Cart & Payment Checkout -->
                     <div class="col-md-5">
-                        <div class="card border-0 shadow-sm p-3" style="border-radius: 12px; background: #fff;">
-                            <h5 class="fw-bold mb-3"><i class="bx bx-shopping-bag me-2 text-success"></i>Keranjang Transaksi</h5>
+                        <div 
+                            class="card border-0 shadow-sm p-3 pos-cart-card" 
+                            :class="{ 'border-2 border-warning': activeZone === 'cart' }"
+                            style="border-radius: 12px; background: #fff;"
+                        >
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="fw-bold mb-0">
+                                    <i class="bx bx-shopping-bag me-2 text-success"></i>Keranjang Transaksi
+                                </h5>
+                                <span class="badge bg-secondary font-monospace" title="Tekan F2 untuk fokus keranjang">
+                                    F2 Keranjang
+                                </span>
+                            </div>
 
                             <!-- Prescription Selector & Linked Badge -->
                             <div class="mb-3">
@@ -403,8 +1151,11 @@ const printReceipt = () => {
 
                             <!-- Customer Selection -->
                             <div class="mb-3">
-                                <label class="form-label small text-muted">Pelanggan / Member Apotek</label>
-                                <select class="form-select form-select-sm mb-2" v-model="selectedCustomer">
+                                <label class="form-label small text-muted d-flex justify-content-between align-items-center">
+                                    <span>Pelanggan / Member Apotek</span>
+                                    <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.7rem;">[F3] Member</span>
+                                </label>
+                                <select ref="customerSelectRef" class="form-select form-select-sm mb-2" v-model="selectedCustomer" @focus="activeZone = 'customer'">
                                     <option value="">-- Umum / Non-Member --</option>
                                     <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }} ({{ c.membership_level ? c.membership_level.toUpperCase() : 'REGULAR' }} - {{ c.points }} Pts)</option>
                                 </select>
@@ -419,11 +1170,27 @@ const printReceipt = () => {
                                         <span class="badge bg-success font-monospace">{{ selectedCustomerDetails.points }} Pts</span>
                                     </div>
 
-                                    <!-- Drug Allergy Warning Badge -->
-                                    <div class="mt-2 p-2 rounded bg-danger bg-opacity-15 border border-danger border-opacity-25 text-danger small">
-                                        <div class="fw-bold mb-0">
-                                            <i class="bx bx-error-circle me-1 fs-6 align-middle"></i>
-                                            Alergi Obat: <span class="badge bg-danger text-white ms-1">{{ selectedCustomerDetails.allergies || 'Tidak ada riwayat alergi' }}</span>
+                                    <!-- Drug Allergy & Safety Status Badge -->
+                                    <div v-if="selectedCustomerDetails.allergies" class="mt-2 p-2.5 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-50 text-danger small shadow-xs">
+                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                            <div class="fw-bold text-danger d-flex align-items-center gap-1">
+                                                <i class="bx bx-shield-x fs-5 text-danger animate-pulse"></i>
+                                                <span>PERINGATAN ALERGI OBAT!</span>
+                                            </div>
+                                            <span class="badge bg-danger text-white font-monospace">SAFETY ALERT</span>
+                                        </div>
+                                        <div class="p-2 rounded bg-white bg-opacity-75 border border-danger border-opacity-25 text-dark fw-bold small">
+                                            <i class="bx bx-error me-1 text-danger"></i>
+                                            Sensitif Terhadap: <span class="text-danger fs-6">{{ selectedCustomerDetails.allergies }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-else class="mt-2 p-2 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 text-success small d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center gap-1.5 fw-semibold text-success">
+                                            <i class="bx bx-shield-quarter fs-5 me-1 text-success"></i>
+                                            <span>Riwayat Alergi:</span>
+                                            <span class="badge bg-success text-white px-2 py-1 ms-1">
+                                                <i class="bx bx-check-circle me-1"></i> Tidak Ada (Aman)
+                                            </span>
                                         </div>
                                     </div>
 
@@ -433,22 +1200,84 @@ const printReceipt = () => {
                                 </div>
                             </div>
 
-                            <!-- Cart Items List -->
-                            <div class="cart-list mb-3" style="max-height: 240px; overflow-y: auto;">
-                                <div v-for="item in cart" :key="item.kode" class="d-flex justify-content-between align-items-center border-bottom py-2">
-                                    <div>
-                                        <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">{{ item.nama }}</h6>
-                                        <small class="text-muted">{{ formatCurrency(item.harga) }} x {{ item.quantity }}</small>
+                            <!-- Cart Items List with Keyboard Navigation & Shortcuts -->
+                            <div class="cart-list mb-3" style="max-height: 260px; overflow-y: auto;">
+                                <div 
+                                    v-for="(item, idx) in cart" 
+                                    :key="item.kode" 
+                                    class="p-2 border-bottom pos-cart-item"
+                                    :class="{ 'bg-warning bg-opacity-10 border-start border-warning border-4 rounded-2 shadow-xs active-cart-item': cartIndex === idx && activeZone === 'cart' }"
+                                    @click="cartIndex = idx; activeZone = 'cart';"
+                                >
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div style="flex: 1; padding-right: 8px;">
+                                            <h6 class="fw-bold mb-1" style="font-size: 0.85rem;">
+                                                {{ item.nama }}
+                                                <span v-if="cartIndex === idx && activeZone === 'cart'" class="badge bg-warning text-dark ms-1 font-monospace" style="font-size: 0.68rem;">Terpilih</span>
+                                            </h6>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <select 
+                                                    v-if="item.units && item.units.length > 0" 
+                                                    class="form-select form-select-sm border-secondary-subtle py-0 px-2 rounded-2" 
+                                                    style="font-size: 0.75rem; width: auto;" 
+                                                    v-model="item.unit_id"
+                                                    @change="changeCartUnit(item, $event.target.value)"
+                                                >
+                                                    <option v-for="u in item.units" :key="u.unit_id" :value="u.unit_id">
+                                                        {{ u.unit_name }} ({{ formatCurrency(u.selling_price) }})
+                                                    </option>
+                                                </select>
+                                                <span v-else class="badge bg-light text-dark border small">{{ item.unit_name || 'Unit' }}</span>
+                                                <small class="text-muted ms-1">@ {{ formatCurrency(item.harga) }}</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button type="button" class="btn btn-sm btn-outline-danger px-2 py-0" @click.stop="updateQty(item, -1)" title="Kurangi ( - )">-</button>
+                                            
+                                            <!-- Inline Quantity Edit Field -->
+                                            <div v-if="editingQtyIndex === idx" style="width: 65px;">
+                                                <input 
+                                                    ref="inlineQtyInputRef"
+                                                    type="number" 
+                                                    min="1" 
+                                                    :max="item.maxStok" 
+                                                    class="form-control form-control-sm text-center font-monospace fw-bold p-1 border-primary" 
+                                                    v-model.number="editingQtyValue"
+                                                    @keydown.enter.prevent="saveCartQty(idx)"
+                                                    @keydown.esc.prevent="cancelEditCartQty"
+                                                    @blur="saveCartQty(idx)"
+                                                />
+                                            </div>
+                                            <span 
+                                                v-else 
+                                                class="fw-bold font-monospace px-2 py-1 rounded bg-light border pointer" 
+                                                style="min-width: 32px; text-align: center; cursor: pointer;"
+                                                @click.stop="startEditCartQty(idx)"
+                                                title="Klik / Tekan Enter untuk ketik angka Qty"
+                                            >
+                                                {{ item.quantity }}
+                                            </span>
+
+                                            <button type="button" class="btn btn-sm btn-outline-primary px-2 py-0" @click.stop="updateQty(item, 1)" title="Tambah ( + )">+</button>
+                                            <span class="fw-bold text-dark ms-2" style="font-size: 0.9rem;">{{ formatCurrency(item.harga * item.quantity) }}</span>
+                                            <button type="button" class="btn btn-sm text-muted p-0 ms-1" @click.stop="removeCartItem(idx)" title="Hapus (Delete)">
+                                                <i class="bx bx-trash text-danger"></i>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <button class="btn btn-sm btn-outline-danger px-2" @click="updateQty(item, -1)">-</button>
-                                        <span class="fw-bold">{{ item.quantity }}</span>
-                                        <button class="btn btn-sm btn-outline-primary px-2" @click="updateQty(item, 1)">+</button>
-                                        <span class="fw-bold text-dark ms-2" style="font-size: 0.9rem;">{{ formatCurrency(item.harga * item.quantity) }}</span>
+
+                                    <!-- Quick Keyboard Shortcut Bar when Item Focused -->
+                                    <div v-if="cartIndex === idx && activeZone === 'cart'" class="mt-1 d-flex gap-1 align-items-center font-monospace" style="font-size: 0.68rem;">
+                                        <span class="badge bg-secondary">+ / - : Qty</span>
+                                        <span class="badge bg-secondary">Enter : Ketik Qty</span>
+                                        <span class="badge bg-danger">Del : Hapus Item</span>
                                     </div>
                                 </div>
+
                                 <div v-if="cart.length === 0" class="text-center py-4 text-muted small">
-                                    Belum ada obat dipilih.
+                                    <i class="bx bx-shopping-bag fs-2 d-block mb-1 text-secondary"></i>
+                                    Belum ada obat dipilih. (Scan/Ketik untuk tambah)
                                 </div>
                             </div>
 
@@ -459,14 +1288,17 @@ const printReceipt = () => {
                                     <span class="fw-bold">{{ formatCurrency(subtotal) }}</span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span>Diskon (Rp)</span>
+                                    <span class="d-flex align-items-center gap-1">
+                                        Diskon (Rp) 
+                                        <span class="badge bg-secondary text-white font-monospace" style="font-size: 0.68rem;">[F6]</span>
+                                    </span>
                                     <div style="width: 120px;">
-                                        <RupiahInput v-model="discount" className="form-control-sm text-end" placeholder="0" />
+                                        <RupiahInput ref="discountInputRef" v-model="discount" className="form-control-sm text-end" placeholder="0" @focus="activeZone = 'payment'" />
                                     </div>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <span>PPN (%)</span>
-                                    <input type="number" class="form-control form-control-sm text-end" style="width: 70px;" v-model.number="taxPercent">
+                                    <input ref="taxInputRef" type="number" class="form-control form-control-sm text-end" style="width: 70px;" v-model.number="taxPercent" @focus="activeZone = 'payment'">
                                 </div>
                                 <hr class="my-2">
                                 <div class="d-flex justify-content-between fs-5 fw-bold text-primary">
@@ -475,35 +1307,112 @@ const printReceipt = () => {
                                 </div>
                             </div>
 
-                            <!-- Payment Section -->
+                            <!-- Payment Section (Shortcut Buttons & Keypad navigation) -->
                             <div class="mb-3">
-                                <label class="form-label small text-muted">Metode Pembayaran</label>
-                                <select class="form-select mb-2" v-model="paymentMethod">
-                                    <option value="cash">Cash / Tunai</option>
-                                    <option value="qris">QRIS</option>
-                                    <option value="debit">Kartu Debit</option>
-                                    <option value="transfer">Bank Transfer</option>
+                                <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                    <span>Metode Pembayaran</span>
+                                    <span class="badge bg-secondary font-monospace" style="font-size: 0.68rem;">[F4] Metode</span>
+                                </label>
+                                <select ref="paymentMethodRef" class="form-select form-select-md mb-3 fw-bold rounded-3 shadow-xs" v-model="paymentMethod" @focus="activeZone = 'payment'">
+                                    <option value="cash">[1] 💵 Cash / Tunai</option>
+                                    <option value="qris">[2] 📱 QRIS / E-Wallet</option>
+                                    <option value="debit">[3] 💳 Kartu Debit</option>
+                                    <option value="transfer">[4] 🏦 Bank Transfer</option>
                                 </select>
-                                <label class="form-label small text-muted">Jumlah Bayar (Rp)</label>
-                                <RupiahInput v-model="paidAmount" className="form-control-lg fw-bold text-end text-primary" placeholder="0" />
+
+                                <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between">
+                                    <span>Nominal Bayar (Rp) <span class="text-danger">*</span></span>
+                                    <span class="text-primary font-monospace fw-semibold">[F8/F9] Input Uang Tunai</span>
+                                </label>
+                                
+                                <div class="position-relative mb-2">
+                                    <RupiahInput 
+                                        ref="paidInputRef"
+                                        v-model="paidAmount" 
+                                        className="form-control-lg fw-extrabold text-end text-success shadow-xs rounded-3 border-2" 
+                                        placeholder="0"
+                                        style="font-size: 1.85rem; height: 58px; font-weight: 800; letter-spacing: 0.5px;" 
+                                        @focus="activeZone = 'payment'"
+                                        @keydown.enter.prevent="promptCheckoutConfirmation"
+                                    />
+                                </div>
+
+                                <!-- Quick Cash Shortcut Buttons -->
+                                <div class="d-flex gap-1 flex-wrap mb-3">
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-sm btn-outline-success fw-bold flex-fill rounded-pill d-flex align-items-center justify-content-center gap-1"
+                                        @click="paidAmount = grandTotal; focusPayment();"
+                                        title="Isi otomatis sesuai Total Belanja (F7 / Alt+P)"
+                                    >
+                                        <span>⚡ Uang Pas</span>
+                                        <span class="badge bg-success text-white font-monospace" style="font-size: 0.65rem;">F7</span>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-sm btn-outline-secondary fw-semibold flex-fill rounded-pill d-flex align-items-center justify-content-center gap-1"
+                                        @click="paidAmount = 20000; focusPayment();"
+                                        title="Input Nominal 20.000 (Alt+2)"
+                                    >
+                                        <span>20k</span>
+                                        <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.65rem;">Alt+2</span>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-sm btn-outline-secondary fw-semibold flex-fill rounded-pill d-flex align-items-center justify-content-center gap-1"
+                                        @click="paidAmount = 50000; focusPayment();"
+                                        title="Input Nominal 50.000 (Alt+5)"
+                                    >
+                                        <span>50k</span>
+                                        <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.65rem;">Alt+5</span>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-sm btn-outline-secondary fw-semibold flex-fill rounded-pill d-flex align-items-center justify-content-center gap-1"
+                                        @click="paidAmount = 100000; focusPayment();"
+                                        title="Input Nominal 100.000 (Alt+1)"
+                                    >
+                                        <span>100k</span>
+                                        <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.65rem;">Alt+1</span>
+                                    </button>
+                                </div>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <span class="fw-bold">Kembalian:</span>
-                                <span class="fw-bold fs-5" :class="changeAmount >= 0 ? 'text-success' : 'text-danger'">{{ formatCurrency(changeAmount) }}</span>
+                            <!-- Big Kembalian Display Box -->
+                            <div 
+                                class="p-3 rounded-3 mb-3 d-flex justify-content-between align-items-center border shadow-xs"
+                                :class="changeAmount >= 0 ? 'bg-success bg-opacity-10 border-success border-opacity-25 text-success' : 'bg-danger bg-opacity-10 border-danger border-opacity-25 text-danger'"
+                            >
+                                <span class="fw-bold fs-6">{{ changeAmount >= 0 ? 'Kembalian:' : 'Kurang Bayar:' }}</span>
+                                <span class="fw-extrabold font-monospace" style="font-size: 1.5rem; font-weight: 800;">
+                                    {{ formatCurrency(Math.abs(changeAmount)) }}
+                                </span>
                             </div>
 
-                            <button class="btn btn-success btn-lg w-100 shadow-sm fw-bold" :disabled="isProcessing || cart.length === 0" @click="handleCheckout">
-                                <i class="bx bx-check-circle me-1"></i> Bayar & Cetak Struk
+                            <button 
+                                type="button"
+                                class="btn btn-success btn-lg w-100 shadow-sm fw-bold rounded-3 py-3 fs-5 d-flex align-items-center justify-content-center gap-2" 
+                                :disabled="isProcessing || cart.length === 0" 
+                                @click="promptCheckoutConfirmation"
+                            >
+                                <i class="bx bx-check-circle fs-4"></i>
+                                <span>Bayar & Final Transaksi</span>
+                                <span class="badge bg-black bg-opacity-25 text-white font-monospace ms-1">F10</span>
                             </button>
+
+                            <div class="text-center mt-2">
+                                <button type="button" class="btn btn-link btn-sm text-danger text-decoration-none" @click="promptCancelTransaction" :disabled="cart.length === 0">
+                                    <i class="bx bx-x-circle me-1"></i> Batalkan Transaksi <span class="badge bg-light text-dark border font-monospace">Ctrl+Shift+X</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Struk Thermal Receipt Modal -->
-        <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
+        <!-- ===== MODAL RECEIPT / STRUK PENJUALAN ===== -->
+        <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
             <div class="modal-dialog modal-sm">
                 <div class="modal-content" v-if="receiptData">
                     <div class="modal-body p-3 font-monospace" id="printableReceipt">
@@ -544,45 +1453,70 @@ const printReceipt = () => {
                             <small>Semoga Lekas Sembuh</small>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
-                        <button type="button" class="btn btn-primary btn-sm" @click="printReceipt"><i class="bx bx-printer me-1"></i> Print</button>
+                    <div class="modal-footer bg-light flex-wrap justify-content-between gap-1 p-2">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" @click="resetTransaction">
+                            Tutup <span class="badge bg-black bg-opacity-25 font-monospace ms-1">Esc</span>
+                        </button>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-success btn-sm" @click="closeReceiptModal(); resetTransaction();">
+                                <i class="bx bx-plus-circle me-1"></i> Baru <span class="badge bg-black bg-opacity-25 font-monospace ms-1">N</span>
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm fw-bold" @click="printReceipt">
+                                <i class="bx bx-printer me-1"></i> Print <span class="badge bg-black bg-opacity-25 font-monospace ms-1">Enter</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- MODAL KONFIRMASI FINAL PENJUALAN -->
+        <!-- ===== MODAL KONFIRMASI FINAL PENJUALAN (F10) ===== -->
         <div v-if="showConfirmModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.65);" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title fw-bold">
-                            <i class="bx bx-check-shield me-2"></i>Konfirmasi Final Penjualan
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+                    <div class="modal-header bg-success text-white py-3">
+                        <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                            <i class="bx bx-check-shield fs-4"></i>Konfirmasi Finalisasi Transaksi POS
                         </h5>
-                        <button type="button" class="btn-close btn-close-white" @click="showConfirmModal = false"></button>
+                        <button type="button" class="btn-close btn-close-white" @click="showConfirmModal = false; focusSearchInput();"></button>
                     </div>
-                    <div class="modal-body text-dark">
-                        <div class="alert alert-info border-0 d-flex align-items-center mb-3">
-                            <i class="bx bx-info-circle fs-4 me-2"></i>
-                            <div>Periksa kembali rincian nama obat, jumlah unit, dan nominal pembayaran kasir sebelum menyelesaikan transaksi.</div>
+                    <div class="modal-body text-dark p-4">
+                        <div class="alert alert-info border-0 d-flex align-items-center mb-3 rounded-3">
+                            <i class="bx bx-info-circle fs-4 me-2 flex-shrink-0"></i>
+                            <div>Apakah rincian transaksi obat, jumlah unit, dan pembayaran sudah benar? Tekan <strong class="text-dark">[Enter]</strong> untuk memfinalisasi.</div>
                         </div>
 
-                        <!-- Summary Header -->
+                        <!-- Summary Header Boxes -->
                         <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <small class="text-muted d-block">Pelanggan / Customer</small>
-                                <strong class="text-dark fs-6">{{ selectedCustomerDetails?.name || 'Customer Umum' }}</strong>
+                            <div class="col-md-3">
+                                <div class="p-2.5 rounded-3 bg-light border text-center">
+                                    <small class="text-muted d-block">Metode Bayar</small>
+                                    <strong class="text-uppercase text-primary fs-6">{{ paymentMethod }}</strong>
+                                </div>
                             </div>
-                            <div class="col-md-6 text-end">
-                                <small class="text-muted d-block">Metode Pembayaran</small>
-                                <span class="badge bg-primary text-uppercase fs-6">{{ paymentMethod }}</span>
+                            <div class="col-md-3">
+                                <div class="p-2.5 rounded-3 bg-light border text-center">
+                                    <small class="text-muted d-block">Total Belanja</small>
+                                    <strong class="text-dark fs-6">{{ formatCurrency(grandTotal) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-2.5 rounded-3 bg-light border text-center">
+                                    <small class="text-muted d-block">Uang Dibayar</small>
+                                    <strong class="text-success fs-6">{{ formatCurrency(paidAmount) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="p-2.5 rounded-3 bg-light border text-center">
+                                    <small class="text-muted d-block">Kembalian</small>
+                                    <strong class="text-dark fs-6">{{ formatCurrency(changeAmount) }}</strong>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Table Review Barang -->
-                        <h6 class="fw-bold text-dark mb-2"><i class="bx bx-list-check text-primary me-1"></i>Daftar Obat Dibeli ({{ cart.length }} Item)</h6>
-                        <div class="table-responsive mb-3">
+                        <!-- Table Review Items -->
+                        <h6 class="fw-bold text-dark mb-2"><i class="bx bx-list-check text-primary me-1"></i>Rincian Obat Dibeli ({{ cart.length }} Item)</h6>
+                        <div class="table-responsive mb-2">
                             <table class="table table-sm table-bordered align-middle">
                                 <thead class="bg-light text-dark">
                                     <tr>
@@ -602,37 +1536,51 @@ const printReceipt = () => {
                                         <td class="text-end fw-bold text-dark">{{ formatCurrency(item.harga * item.quantity) }}</td>
                                     </tr>
                                 </tbody>
-                                <tfoot>
-                                    <tr class="table-light">
-                                        <td colspan="4" class="text-end fw-bold">Grand Total:</td>
-                                        <td class="text-end fw-bold text-primary fs-6">{{ formatCurrency(grandTotal) }}</td>
-                                    </tr>
-                                    <tr class="table-light">
-                                        <td colspan="4" class="text-end fw-bold">Jumlah Uang Dibayar:</td>
-                                        <td class="text-end fw-bold text-success fs-6">{{ formatCurrency(paidAmount) }}</td>
-                                    </tr>
-                                    <tr class="table-light">
-                                        <td colspan="4" class="text-end fw-bold">Uang Kembalian:</td>
-                                        <td class="text-end fw-bold text-dark fs-6">{{ formatCurrency(changeAmount) }}</td>
-                                    </tr>
-                                </tfoot>
                             </table>
                         </div>
                     </div>
 
-                    <div class="modal-footer bg-light">
-                        <button type="button" class="btn btn-secondary" @click="showConfirmModal = false">
-                            <i class="bx bx-x me-1"></i> Batal & Review Ulang
+                    <div class="modal-footer bg-light justify-content-between p-3">
+                        <button type="button" class="btn btn-secondary px-3" @click="showConfirmModal = false; focusSearchInput();">
+                            <i class="bx bx-x me-1"></i> Kembali <span class="badge bg-black bg-opacity-25 font-monospace ms-1">Esc</span>
                         </button>
-                        <button type="button" class="btn btn-success btn-lg fw-bold px-4 shadow-sm" :disabled="isProcessing" @click="executeFinalCheckout">
-                            <i class="bx bx-check-circle me-1"></i> PROSES FINAL PENJUALAN
+                        <button type="button" class="btn btn-success btn-lg fw-bold px-4 shadow-sm d-flex align-items-center gap-2" :disabled="isProcessing" @click="executeFinalCheckout">
+                            <i class="bx bx-check-circle fs-5"></i>
+                            <span>PROSES FINAL TRANSAKSI</span>
+                            <span class="badge bg-black bg-opacity-25 text-white font-monospace">Enter</span>
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- BUKA SHIFT MODAL IN POS -->
+        <!-- ===== MODAL KONFIRMASI BATAL TRANSAKSI (Ctrl+Shift+X) ===== -->
+        <div v-if="showCancelConfirmModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.65);" aria-modal="true" role="dialog">
+            <div class="modal-dialog">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title fw-bold"><i class="bx bx-error-circle me-2"></i>Batalkan Transaksi POS?</h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showCancelConfirmModal = false; focusSearchInput();"></button>
+                    </div>
+                    <div class="modal-body text-dark py-4">
+                        <p class="fs-6 mb-2 text-dark">Apakah Anda yakin ingin membatalkan transaksi POS ini?</p>
+                        <div class="alert alert-warning mb-0 border-0 small">
+                            <i class="bx bx-info-circle me-1"></i> Seluruh {{ cart.length }} item obat yang ada di keranjang transaksi saat ini akan dihapus.
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light justify-content-between">
+                        <button type="button" class="btn btn-secondary" @click="showCancelConfirmModal = false; focusSearchInput();">
+                            Kembali <span class="badge bg-black bg-opacity-25 font-monospace ms-1">Esc</span>
+                        </button>
+                        <button type="button" class="btn btn-danger fw-bold px-3" @click="cancelTransactionConfirmed">
+                            <i class="bx bx-trash me-1"></i> Ya, Batalkan <span class="badge bg-black bg-opacity-25 font-monospace ms-1">Enter</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== MODAL BUKA SHIFT KASIR ===== -->
         <div v-if="showOpenShiftModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.6);" aria-modal="true" role="dialog">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -704,7 +1652,7 @@ const printReceipt = () => {
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white">
                         <h5 class="modal-title fw-bold"><i class="bx bx-notepad me-2"></i>Pilih Resep Dokter (Terverifikasi)</h5>
-                        <button type="button" class="btn-close btn-close-white" @click="showPrescriptionModal = false"></button>
+                        <button type="button" class="btn-close btn-close-white" @click="showPrescriptionModal = false; focusSearchInput();"></button>
                     </div>
                     <div class="modal-body p-3">
                         <div class="table-responsive">
@@ -740,7 +1688,159 @@ const printReceipt = () => {
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" @click="showPrescriptionModal = false">Tutup</button>
+                        <button type="button" class="btn btn-secondary" @click="showPrescriptionModal = false; focusSearchInput();">Tutup</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== MODAL DAFTAR KEYBOARD SHORTCUT (Ctrl + /) ===== -->
+        <div v-if="showShortcutModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.65);" aria-modal="true" role="dialog">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+                    <div class="modal-header bg-dark text-white py-3">
+                        <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                            <i class="bx bx-kbd fs-4 text-primary"></i> PANDUAN KEYBOARD SHORTCUT POS KASIR
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showShortcutModal = false; focusSearchInput();"></button>
+                    </div>
+                    <div class="modal-body p-4 text-dark" style="max-height: 70vh; overflow-y: auto;">
+                        <p class="text-muted small mb-3">Kasir dapat memproses transaksi dengan sangat cepat tanpa menggunakan mouse dengan menekan kombinasi tombol berikut:</p>
+                        
+                        <div class="row g-3">
+                            <!-- Kolom 1: Navigasi & Pencarian -->
+                            <div class="col-md-6">
+                                <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                                    <h6 class="fw-bold text-primary mb-3"><i class="bx bx-search me-1"></i>1. Pencarian & Navigasi Produk</h6>
+                                    <table class="table table-sm table-borderless align-middle mb-0 small">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width: 130px;"><span class="badge bg-dark font-monospace fs-7">F1</span></td>
+                                                <td>Fokus Kolom Cari / Scan Produk</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-secondary font-monospace fs-7">Arrow Up / Down</span></td>
+                                                <td>Pilih Hasil Pencarian Obat</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-primary font-monospace fs-7">Enter</span></td>
+                                                <td>Tambahkan Produk ke Keranjang</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-secondary font-monospace fs-7">Esc</span></td>
+                                                <td>Kosongkan / Tutup Pencarian</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-info text-dark font-monospace fs-7">Barcode Scan</span></td>
+                                                <td>Otomatis Tambah Produk + Qty</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Kolom 2: Keranjang -->
+                            <div class="col-md-6">
+                                <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                                    <h6 class="fw-bold text-success mb-3"><i class="bx bx-shopping-bag me-1"></i>2. Navigasi Keranjang Belanja</h6>
+                                    <table class="table table-sm table-borderless align-middle mb-0 small">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width: 130px;"><span class="badge bg-dark font-monospace fs-7">F2</span></td>
+                                                <td>Fokus ke Area Keranjang</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-secondary font-monospace fs-7">Arrow Up / Down</span></td>
+                                                <td>Pilih Item di Dalam Keranjang</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-primary font-monospace fs-7">Enter</span></td>
+                                                <td>Ketik / Edit Qty Item Terpilih</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-success font-monospace fs-7">+ / Ctrl + +</span></td>
+                                                <td>Tambah Qty +1</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-warning text-dark font-monospace fs-7">- / Ctrl + -</span></td>
+                                                <td>Kurangi Qty -1</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-danger font-monospace fs-7">Delete</span></td>
+                                                <td>Hapus Item Terpilih dari Keranjang</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Kolom 3: Fokus & Pembayaran -->
+                            <div class="col-md-6">
+                                <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                                    <h6 class="fw-bold text-warning text-dark mb-3"><i class="bx bx-credit-card me-1"></i>3. Pembayaran & Pelanggan</h6>
+                                    <table class="table table-sm table-borderless align-middle mb-0 small">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width: 130px;"><span class="badge bg-dark font-monospace fs-7">F3</span></td>
+                                                <td>Pilih Pelanggan / Member Apotek</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-dark font-monospace fs-7">F4</span></td>
+                                                <td>Pilih Metode Pembayaran</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-secondary font-monospace fs-7">1 / 2 / 3 / 4</span></td>
+                                                <td>Pilih Cash / QRIS / Debit / Transfer</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-dark font-monospace fs-7">F6</span></td>
+                                                <td>Input Diskon Transaksi (Rp)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-dark font-monospace fs-7">F8 / F9</span></td>
+                                                <td>Fokus Input Nominal Pembayaran</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Kolom 4: Final Transaksi & Cetak Nota -->
+                            <div class="col-md-6">
+                                <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                                    <h6 class="fw-bold text-danger mb-3"><i class="bx bx-check-shield me-1"></i>4. Final Transaksi & Struk</h6>
+                                    <table class="table table-sm table-borderless align-middle mb-0 small">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width: 130px;"><span class="badge bg-success font-monospace fs-7">F10</span></td>
+                                                <td>Finalisasi Transaksi POS</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-primary font-monospace fs-7">Enter</span></td>
+                                                <td>Konfirmasi Final / Cetak Struk Nota</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-info text-dark font-monospace fs-7">Ctrl + N / N</span></td>
+                                                <td>Mulai Transaksi Baru Baru</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-danger font-monospace fs-7">Ctrl + Shift + X</span></td>
+                                                <td>Batalkan Seluruh Transaksi POS</td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="badge bg-dark font-monospace fs-7">Ctrl + /</span></td>
+                                                <td>Buka Modal Panduan Shortcut Ini</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-dark px-4 fw-bold" @click="showShortcutModal = false; focusSearchInput();">
+                            Paham & Tutup <span class="badge bg-white text-dark font-monospace ms-1">Esc</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -753,5 +1853,39 @@ const printReceipt = () => {
 .product-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+.pos-item-row:hover {
+    background-color: #f1f5f9 !important;
+}
+
+.pos-input-field:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25) !important;
+}
+
+.pos-cart-card.border-warning {
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3) !important;
+}
+
+.active-search-item {
+    border-left: 4px solid #3b82f6 !important;
+}
+
+.active-cart-item {
+    border-left: 4px solid #f59e0b !important;
+}
+
+.pointer {
+    cursor: pointer;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.animate-pulse {
+    animation: pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 </style>

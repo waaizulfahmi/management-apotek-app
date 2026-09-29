@@ -54,7 +54,7 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Login - Apotek Medika Sore" />
+    <Head title="Login" />
 
     <div class="login-wrapper min-vh-100 d-flex align-items-center justify-content-center p-3 p-md-4">
         <!-- Ambient Glowing Orbs Background -->

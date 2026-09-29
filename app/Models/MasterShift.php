@@ -35,10 +35,11 @@ class MasterShift extends Model
         $now = $time ? Carbon::parse($time) : Carbon::now();
         $currentTimeStr = $now->format('H:i:s');
 
-        $start = Carbon::parse($this->start_time)->format('H:i:s');
-        $end = Carbon::parse($this->end_time)->format('H:i:s');
+        $grace = $this->grace_minutes ?? 30;
+        $start = Carbon::parse($this->start_time)->subMinutes($grace)->format('H:i:s');
+        $end = Carbon::parse($this->end_time)->addMinutes($grace)->format('H:i:s');
 
-        if ($start <= $end) {
+        if ($this->start_time <= $this->end_time) {
             // Normal daytime shift (e.g., 07:00 - 15:00)
             return $currentTimeStr >= $start && $currentTimeStr <= $end;
         } else {

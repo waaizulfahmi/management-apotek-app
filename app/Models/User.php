@@ -22,6 +22,7 @@ class User extends Authenticatable
         'role',
         'status',
         'outlet_id',
+        'access_all_outlets',
         'last_login_at',
         'last_login_ip',
         'failed_login_attempts',
@@ -42,6 +43,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'locked_until' => 'datetime',
             'failed_login_attempts' => 'integer',
+            'access_all_outlets' => 'boolean',
         ];
     }
 
@@ -62,7 +64,38 @@ class User extends Authenticatable
 
     public function outlets()
     {
-        return $this->belongsToMany(Outlet::class, 'user_outlets');
+        return $this->belongsToMany(Outlet::class, 'user_outlets')
+            ->withPivot(['is_primary'])
+            ->whereNull('user_outlets.deleted_at');
+    }
+
+    public function hasAccessToAllOutlets(): bool
+    {
+        if ($this->access_all_outlets) {
+            return true;
+        }
+
+        $roleStr = strtolower($this->role ?? '');
+        if (in_array($roleStr, ['admin', 'owner', 'superadmin', 'super admin', 'manager'])) {
+            return true;
+        }
+
+        try {
+            if (method_exists($this, 'hasAnyRole') && $this->hasAnyRole(['admin', 'owner', 'superadmin', 'super admin', 'Super Admin', 'Admin', 'Manager'])) {
+                return true;
+            }
+        } catch (\Throwable $e) {}
+
+        return false;
+    }
+
+    public function hasOutletAccess(int $outletId): bool
+    {
+        if ($this->hasAccessToAllOutlets()) {
+            return true;
+        }
+
+        return $this->outlets()->where('outlets.id', $outletId)->exists();
     }
 
     public function auditLogs()

@@ -8,6 +8,8 @@ import Swal from 'sweetalert2';
 
 const props = defineProps({
     opnames: Object,
+    outlets: Array,
+    activeOutletId: [Number, String],
     metrics: Object,
     filters: Object,
 });
@@ -45,24 +47,22 @@ watch([searchFilter, statusFilter, startDate, endDate], () => {
     debouncedSearch();
 });
 
+const showCreateModal = ref(false);
 const createForm = useForm({
+    outlet_id: props.activeOutletId || (props.outlets && props.outlets[0] ? props.outlets[0].id : ''),
+    opname_date: new Date().toISOString().substring(0, 10),
     notes: 'Stok Opname Manual Routine',
 });
 
+const openCreateModal = () => {
+    createForm.outlet_id = props.activeOutletId || (props.outlets && props.outlets[0] ? props.outlets[0].id : '');
+    showCreateModal.value = true;
+};
+
 const submitCreateSO = () => {
-    Swal.fire({
-        title: 'Buat Stok Opname Baru?',
-        text: 'Sistem akan mengambil snapshot stok obat saat ini sebagai stok sistem.',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Ya, Buat Sesi Baru!',
-        cancelButtonText: 'Batal',
-        confirmButtonColor: '#3b6bff',
-        cancelButtonColor: '#64748b',
-        customClass: { popup: 'rounded-4 shadow-lg border-0' }
-    }).then((res) => {
-        if (res.isConfirmed) {
-            createForm.post(route('opname.store'));
+    createForm.post(route('opname.store'), {
+        onSuccess: () => {
+            showCreateModal.value = false;
         }
     });
 };
@@ -120,7 +120,7 @@ const getStatusBadge = (status) => {
                         <p class="text-muted small mb-0">Kelola penginputan stok fisik manual, perhitungan selisih stok, dan penyesuaian otomatis ke stok sistem.</p>
                     </div>
 
-                    <button @click="submitCreateSO" :disabled="createForm.processing" class="btn btn-primary fw-bold shadow-sm">
+                    <button @click="openCreateModal" class="btn btn-primary fw-bold shadow-sm">
                         <i class="bx bx-plus-circle me-1"></i> Buat Stok Opname Baru
                     </button>
                 </div>
@@ -184,6 +184,7 @@ const getStatusBadge = (status) => {
                             <thead class="bg-primary text-white">
                                 <tr>
                                     <th>No SO</th>
+                                    <th>Outlet</th>
                                     <th>Tanggal</th>
                                     <th>Petugas / User</th>
                                     <th class="text-center">Total Item</th>
@@ -198,6 +199,11 @@ const getStatusBadge = (status) => {
                             <tbody>
                                 <tr v-for="so in opnames.data" :key="so.id">
                                     <td class="fw-bold text-primary">{{ so.opname_number }}</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border fw-semibold style-xs">
+                                            <i class="bx bx-store me-1 text-primary"></i>{{ so.outlet?.name || 'Apotek Utama' }}
+                                        </span>
+                                    </td>
                                     <td>{{ formatDate(so.opname_date) }}</td>
                                     <td>{{ so.user?.name || '-' }}</td>
                                     <td class="text-center fw-bold">{{ so.total_items }}</td>
@@ -227,7 +233,7 @@ const getStatusBadge = (status) => {
                                     </td>
                                 </tr>
                                 <tr v-if="!opnames.data || opnames.data.length === 0">
-                                    <td colspan="10" class="text-center py-4 text-muted">Belum ada riwayat dokumen Stok Opname.</td>
+                                    <td colspan="11" class="text-center py-4 text-muted">Belum ada riwayat dokumen Stok Opname.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -240,6 +246,52 @@ const getStatusBadge = (status) => {
                         :to="opnames.to"
                         :total="opnames.total"
                     />
+                </div>
+            </div>
+
+            <!-- Modal Buat Stok Opname Baru -->
+            <div v-if="showCreateModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                        <div class="modal-header bg-gradient-primary text-white p-3">
+                            <h5 class="modal-title fw-bold">
+                                <i class="bx bx-plus-circle me-1"></i> Buat Dokumen Stok Opname Baru
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" @click="showCreateModal = false"></button>
+                        </div>
+                        <form @submit.prevent="submitCreateSO">
+                            <div class="modal-body p-4 text-start">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-dark mb-1">
+                                        Pilih Outlet <span class="text-danger">*</span>
+                                    </label>
+                                    <select v-model="createForm.outlet_id" class="form-select" required>
+                                        <option value="" disabled>-- Pilih Outlet --</option>
+                                        <option v-for="out in outlets" :key="out.id" :value="out.id">
+                                            🏢 {{ out.name }} {{ out.is_main ? '(Pusat)' : '' }}
+                                        </option>
+                                    </select>
+                                    <small class="text-muted d-block mt-1 style-xs">Sistem akan menyerap produk dan stok fisik awal dari outlet yang dipilih.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-dark mb-1">Tanggal Stok Opname</label>
+                                    <input type="date" v-model="createForm.opname_date" class="form-control" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-dark mb-1">Keterangan / Sesi SO</label>
+                                    <input type="text" v-model="createForm.notes" class="form-control" placeholder="Contoh: SO Bulanan Agustus 2026">
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light p-3">
+                                <button type="button" class="btn btn-secondary" @click="showCreateModal = false">Batal</button>
+                                <button type="submit" :disabled="createForm.processing" class="btn btn-primary fw-bold px-4">
+                                    <i class="bx bx-check me-1"></i> Buat Sesi SO
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </section>

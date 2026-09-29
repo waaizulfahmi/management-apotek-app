@@ -297,12 +297,12 @@ const printStockCard = () => {
                                     <th>Tanggal & Jam</th>
                                     <th>Obat</th>
                                     <th>Batch / Expired</th>
-                                    <th>Gudang</th>
                                     <th>Jenis Transaksi</th>
                                     <th>No. Referensi</th>
+                                    <th>Transaksi (Qty & Satuan)</th>
                                     <th class="text-end text-success">Masuk (+)</th>
                                     <th class="text-end text-danger">Keluar (-)</th>
-                                    <th class="text-end fw-bold">Saldo (Running)</th>
+                                    <th class="text-end fw-bold">Saldo Base Stock</th>
                                     <th>User</th>
                                 </tr>
                             </thead>
@@ -317,7 +317,6 @@ const printStockCard = () => {
                                         <div><span class="badge bg-light text-dark border">{{ m.batch_number || '-' }}</span></div>
                                         <small class="text-muted">Exp: {{ m.expired_date || '-' }}</small>
                                     </td>
-                                    <td class="small">{{ m.warehouse_name }}</td>
                                     <td>
                                         <span class="badge" :class="{
                                             'bg-success': m.movement_type === 'PURCHASE' || m.movement_type === 'BONUS',
@@ -330,7 +329,18 @@ const printStockCard = () => {
                                         </span>
                                     </td>
                                     <td class="small font-monospace fw-bold text-primary">{{ m.reference_number || m.movement_number }}</td>
-                                    <!-- Masuk (+) -->
+                                    
+                                    <!-- Transaksi (Qty & Satuan Asli) -->
+                                    <td>
+                                        <span class="badge bg-light text-dark border font-monospace">
+                                            {{ m.type === 'in' ? '+' : '-' }}{{ m.transaction_quantity || m.quantity }} {{ m.unit_name || 'Unit' }}
+                                        </span>
+                                        <small class="d-block text-muted" v-if="m.conversion_to_base > 1" style="font-size: 0.72rem;">
+                                            (1 {{ m.unit_name }} = {{ m.conversion_to_base }} Base)
+                                        </small>
+                                    </td>
+
+                                    <!-- Masuk (+) Base -->
                                     <td class="text-end fw-bold">
                                         <span v-if="m.movement_type === 'STOCK_OPNAME' && m.quantity === 0" class="text-muted font-monospace">
                                             0
@@ -340,14 +350,14 @@ const printStockCard = () => {
                                         </span>
                                         <span v-else class="text-muted">—</span>
                                     </td>
-                                    <!-- Keluar (-) -->
+                                    <!-- Keluar (-) Base -->
                                     <td class="text-end fw-bold">
                                         <span v-if="m.type === 'out'" class="text-danger">
                                             -{{ formatNumber(m.quantity) }}
                                         </span>
                                         <span v-else class="text-muted">—</span>
                                     </td>
-                                    <!-- Saldo -->
+                                    <!-- Saldo Base -->
                                     <td class="text-end fw-bold text-primary fs-6">
                                         {{ formatNumber(m.stock_after) }}
                                     </td>

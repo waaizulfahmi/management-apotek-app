@@ -18,7 +18,16 @@ class FefoService
      * @return array Array of allocated batch items [{batch_id, quantity, buy_price, unit_price}]
      * @throws Exception
      */
-    public static function deductStock(string $medicineKode, int $qtyNeeded, int $userId, string $referenceNumber = ''): array
+    public static function deductStock(
+        string $medicineKode, 
+        int $qtyNeeded, 
+        int $userId, 
+        string $referenceNumber = '',
+        ?int $unitId = null,
+        ?string $unitName = null,
+        ?int $transactionQty = null,
+        float $conversionFactor = 1.0000
+    ): array
     {
         $medicine = Obat::findOrFail($medicineKode);
 
@@ -76,7 +85,7 @@ class FefoService
 
             $smNo = 'SM-' . date('Ymd') . '-' . rand(10000, 99999);
 
-            // Create stock movement record
+            // Create stock movement record with unit snapshot
             DB::table('stock_movements')->insert([
                 'movement_number' => $smNo,
                 'medicine_id' => $medicineKode,
@@ -90,6 +99,10 @@ class FefoService
                 'stock_after' => $newStock,
                 'reference_number' => $referenceNumber,
                 'user_id' => $userId,
+                'unit_id' => $unitId,
+                'unit_name' => $unitName,
+                'transaction_quantity' => $transactionQty ?? $deductQty,
+                'conversion_to_base' => $conversionFactor,
                 'notes' => 'Penjualan POS (FEFO)',
                 'status' => 'POSTED',
                 'created_at' => now(),

@@ -6,6 +6,15 @@ import Swal from 'sweetalert2';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+const activeOutlet = computed(() => page.props.active_outlet);
+const userOutlets = computed(() => page.props.user_outlets || []);
+
+const switchOutlet = (outletId) => {
+    if (activeOutlet.value?.id === outletId) return;
+    router.post(route('outlets.switch'), { outlet_id: outletId }, {
+        preserveScroll: false,
+    });
+};
 
 // Global Swal Flash Message Listener
 watch(() => page.props.flash, (flash) => {
@@ -35,6 +44,10 @@ const isCollapsed = ref(false);
 const isDarkMode = ref(false);
 const currentTime = ref('');
 const hasLogoError = ref(false);
+
+watch(() => page.props.app_settings?.pharmacy_logo, () => {
+    hasLogoError.value = false;
+});
 
 const handleLogoError = () => {
     hasLogoError.value = true;
@@ -133,6 +146,11 @@ onUnmounted(() => {
     if (unbindNavigate) unbindNavigate();
 });
 
+const cleanOutletName = (name) => {
+    if (!name) return '';
+    return name.replace(/^apotek\s+/i, '');
+};
+
 const logout = () => {
     showConfirm("Konfirmasi Keluar", "Apakah Anda yakin ingin keluar dari aplikasi apotek?", () => {
         router.post(route('logout'));
@@ -152,18 +170,58 @@ const logout = () => {
                     <h6 class="fw-bold text-dark mb-0">
                         {{ greetingText }}, <span class="text-primary">{{ user?.nama || user?.name || 'User' }}</span>! 👋
                     </h6>
-                    <small class="text-muted" style="font-size: 0.75rem;">Aplikasi Manajemen Apotek Full-Feature</small>
+                    <small class="text-muted" style="font-size: 0.75rem;">Aplikasi Manajemen Apotek</small>
                 </div>
             </div>
 
             <div class="d-flex align-items-center gap-3">
-                <!-- Live Real-Time Day, Date & Digital Clock Badge -->
-                <div class="d-flex align-items-center gap-2 bg-light px-3 py-1.5 rounded-pill border shadow-xs text-dark font-monospace small">
-                    <i class="bx bx-calendar text-primary fs-5"></i>
-                    <span class="fw-bold">{{ currentDateText }}</span>
-                    <span class="text-muted opacity-50">|</span>
-                    <i class="bx bx-time-five text-primary fs-5"></i>
-                    <span class="fw-bold text-primary">{{ currentTime }}</span>
+                <!-- Outlet Switcher Dropdown -->
+                <div class="dropdown" v-if="userOutlets && userOutlets.length > 0">
+                    <button class="btn btn-sm btn-outline-primary rounded-pill shadow-xs px-3 py-1.5 d-flex align-items-center gap-2 dropdown-toggle fw-bold" 
+                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bx bx-store-alt fs-5"></i>
+                        <span>{{ cleanOutletName(activeOutlet?.name) || 'Pilih Outlet' }}</span>
+                        <span v-if="activeOutlet?.is_main" class="badge bg-warning text-dark style-xs ms-1">Pusat</span>
+                        <span v-if="activeOutlet?.status === 'INACTIVE'" class="badge bg-danger text-white style-xs ms-1">Nonaktif</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 mt-2 p-2" style="min-width: 260px; z-index: 1050;">
+                        <li class="dropdown-header text-uppercase fw-bold text-muted small pb-1 border-bottom mb-1">
+                            Pilih Outlet / Cabang
+                        </li>
+                        <li v-for="out in userOutlets" :key="out.id">
+                            <button class="dropdown-item rounded-2 py-2 d-flex align-items-center justify-content-between"
+                                    :class="{ 'active bg-primary text-white': activeOutlet?.id === out.id }"
+                                    @click="switchOutlet(out.id)">
+                                <div class="d-flex align-items-center gap-2 text-truncate">
+                                    <i class="bx" :class="out.is_main ? 'bx-building-house' : 'bx-store'"></i>
+                                    <span class="fw-semibold text-truncate" style="max-width: 150px;">{{ cleanOutletName(out.name) }}</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-1 ms-2">
+                                    <span v-if="out.is_main" class="badge bg-warning text-dark" style="font-size: 0.65rem;">Pusat</span>
+                                    <span v-if="out.status === 'INACTIVE'" class="badge bg-danger text-white" style="font-size: 0.65rem;">Nonaktif</span>
+                                    <i v-if="activeOutlet?.id === out.id" class="bx bx-check fs-5 ms-1"></i>
+                                </div>
+                            </button>
+                        </li>
+                        <li v-if="user?.role === 'admin' || user?.role === 'owner'" class="border-top mt-2 pt-2">
+                            <Link :href="route('outlets.index')" class="dropdown-item text-primary fw-bold text-center rounded-2 py-1.5">
+                                <i class="bx bx-cog me-1"></i> Kelola Master Outlet
+                            </Link>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Premium Redesigned Real-Time Clock & Date Widget -->
+                <div class="clock-widget d-flex align-items-center gap-2 px-3 py-1.5 rounded-pill border">
+                    <div class="d-flex align-items-center gap-1.5 pe-2 border-end border-secondary border-opacity-25">
+                        <i class="bx bx-calendar-event text-primary fs-5"></i>
+                        <span class="fw-semibold date-text" style="font-size: 0.82rem; letter-spacing: 0.01em;">{{ currentDateText }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 ps-1">
+                        <span class="live-pulse-dot" title="Live Real-Time Clock"></span>
+                        <i class="bx bx-time-five text-primary fs-5"></i>
+                        <span class="fw-bold time-text font-monospace fs-6">{{ currentTime }}</span>
+                    </div>
                 </div>
 
                 <!-- Dark Mode Toggle Icon Button -->
@@ -267,6 +325,18 @@ const logout = () => {
                         <i class="bx bx-package sidebar__icon"></i>
                         <span class="sidebar__text">Stok Real Time</span>
                     </Link>
+                    <Link :href="route('inventory.stocks-per-outlet')" class="sidebar__link" :class="{ 'active': route().current('inventory.stocks-per-outlet') }">
+                        <i class="bx bx-store-alt sidebar__icon"></i>
+                        <span class="sidebar__text">Stok Per Outlet</span>
+                    </Link>
+                    <Link :href="route('inventory.outlet-products.index')" class="sidebar__link" :class="{ 'active': route().current('inventory.outlet-products.*') }">
+                        <i class="bx bx-list-check sidebar__icon"></i>
+                        <span class="sidebar__text">Produk Per Outlet</span>
+                    </Link>
+                    <Link :href="route('stock-transfers.index')" class="sidebar__link" :class="{ 'active': route().current('stock-transfers.*') }">
+                        <i class="bx bx-transfer-alt sidebar__icon"></i>
+                        <span class="sidebar__text">Transfer Stok</span>
+                    </Link>
                     <Link :href="route('opname.index')" class="sidebar__link" :class="{ 'active': route().current('opname.*') }">
                         <i class="bx bx-task sidebar__icon"></i>
                         <span class="sidebar__text">Stok Opname</span>
@@ -278,6 +348,14 @@ const logout = () => {
 
                     <!-- Category: MASTER DATA -->
                     <div class="sidebar__category-header">Master Data</div>
+                    <Link :href="route('outlets.index')" class="sidebar__link" :class="{ 'active': route().current('outlets.*') }">
+                        <i class="bx bx-store sidebar__icon text-warning"></i>
+                        <span class="sidebar__text fw-bold text-warning">Manajemen Outlet</span>
+                    </Link>
+                    <Link :href="route('admin.units.index')" class="sidebar__link" :class="{ 'active': route().current('admin.units.*') }">
+                        <i class="bx bx-purchase-tag-alt sidebar__icon"></i>
+                        <span class="sidebar__text">Master Satuan</span>
+                    </Link>
                     <Link :href="route('suppliers.index')" class="sidebar__link" :class="{ 'active': route().current('suppliers.*') }">
                         <i class="bx bxs-truck sidebar__icon fs-5"></i>
                         <span class="sidebar__text">Supplier PBF</span>
@@ -354,9 +432,17 @@ const logout = () => {
 
                     <!-- Category: SYSTEM -->
                     <div class="sidebar__category-header">Pengaturan</div>
+                    <Link :href="route('outlets.index')" class="sidebar__link" :class="{ 'active': route().current('outlets.*') }">
+                        <i class="bx bx-store-alt sidebar__icon"></i>
+                        <span class="sidebar__text">Manajemen Outlet</span>
+                    </Link>
                     <Link :href="route('settings.index')" class="sidebar__link" :class="{ 'active': route().current('settings.*') }">
                         <i class="bx bx-cog sidebar__icon"></i>
                         <span class="sidebar__text">Audit & Settings</span>
+                    </Link>
+                    <Link :href="route('about.index')" class="sidebar__link" :class="{ 'active': route().current('about.*') }">
+                        <i class="bx bx-info-circle sidebar__icon text-info"></i>
+                        <span class="sidebar__text fw-semibold text-info">Tentang & Log Update</span>
                     </Link>
                 </template>
 
@@ -376,6 +462,10 @@ const logout = () => {
                         <i class="bx bx-history sidebar__icon"></i>
                         <span class="sidebar__text">Riwayat Penjualan</span>
                     </Link>
+                    <Link :href="route('about.index')" class="sidebar__link" :class="{ 'active': route().current('about.*') }">
+                        <i class="bx bx-info-circle sidebar__icon text-info"></i>
+                        <span class="sidebar__text fw-semibold text-info">Tentang & Log Update</span>
+                    </Link>
                 </template>
 
                 <!-- Owner Menus -->
@@ -394,12 +484,28 @@ const logout = () => {
                         <i class="bx bx-bar-chart-alt-2 sidebar__icon"></i>
                         <span class="sidebar__text">Laporan Alert</span>
                     </Link>
+                    <Link :href="route('about.index')" class="sidebar__link" :class="{ 'active': route().current('about.*') }">
+                        <i class="bx bx-info-circle sidebar__icon text-info"></i>
+                        <span class="sidebar__text fw-semibold text-info">Tentang & Log Update</span>
+                    </Link>
                 </template>
             </div>
         </aside>
 
         <!-- Main Content Area -->
         <main class="main-wrapper" :class="{ 'expanded': isCollapsed }">
+            <!-- Warning Banner for Inactive Outlet -->
+            <div v-if="activeOutlet && (activeOutlet.status === 'INACTIVE' || !activeOutlet.is_active)"
+                 class="alert alert-danger border-2 border-danger shadow-sm mx-4 mt-3 mb-0 d-flex align-items-center gap-3 rounded-3" role="alert">
+                <i class="bx bx-error-circle fs-2 text-danger flex-shrink-0"></i>
+                <div>
+                    <h6 class="fw-bold mb-1">Peringatan: Outlet Nonaktif</h6>
+                    <p class="mb-0 small">
+                        Outlet <strong>{{ activeOutlet.name }}</strong> sedang tidak aktif dan tidak dapat digunakan untuk transaksi baru (POS, Shift Kasir, Pembelian PO, Stok Opname).
+                    </p>
+                </div>
+            </div>
+
             <div class="flex-grow-1">
                 <slot />
             </div>
@@ -565,5 +671,70 @@ const logout = () => {
     margin-left: 0 !important;
     margin-top: 15px !important;
     padding: 20px !important;
+}
+
+/* Premium Clock Widget Redesign */
+.clock-widget {
+    background: rgba(241, 245, 249, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(59, 107, 255, 0.25) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+}
+
+.date-text {
+    color: #1e293b !important;
+}
+
+.clock-widget:hover {
+    border-color: rgba(59, 107, 255, 0.5) !important;
+    box-shadow: 0 6px 20px rgba(59, 107, 255, 0.15);
+    transform: translateY(-1px);
+}
+
+.live-pulse-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.6);
+    animation: pulse-dot 1.8s infinite;
+}
+
+@keyframes pulse-dot {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.time-text {
+    color: #1d4ed8 !important;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+/* Dark Mode Overrides */
+:global(body.dark-mode) .clock-widget {
+    background: rgba(15, 23, 42, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+:global(body.dark-mode) .date-text {
+    color: #f8fafc !important;
+}
+
+:global(body.dark-mode) .time-text {
+    color: #38bdf8 !important;
 }
 </style>

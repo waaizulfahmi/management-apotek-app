@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 import Pagination from '@/Components/Pagination.vue';
@@ -98,6 +98,86 @@ const currentSummary = computed(() => {
 });
 
 const savingItemId = ref(null);
+const searchInputRef = ref(null);
+const physicalInputs = ref([]);
+
+const setPhysicalInputRef = (el, idx) => {
+    if (el) physicalInputs.value[idx] = el;
+};
+
+const handleInputFocus = (e) => {
+    if (e && e.target && typeof e.target.select === 'function') {
+        e.target.select();
+    }
+};
+
+const focusNextInput = (currentIdx) => {
+    nextTick(() => {
+        const nextIdx = currentIdx + 1;
+        if (nextIdx < (props.items?.data?.length || 0) && physicalInputs.value[nextIdx]) {
+            physicalInputs.value[nextIdx].focus();
+            physicalInputs.value[nextIdx].select();
+        }
+    });
+};
+
+const focusPrevInput = (currentIdx) => {
+    nextTick(() => {
+        const prevIdx = currentIdx - 1;
+        if (prevIdx >= 0 && physicalInputs.value[prevIdx]) {
+            physicalInputs.value[prevIdx].focus();
+            physicalInputs.value[prevIdx].select();
+        }
+    });
+};
+
+const handleInputKeydown = (e, idx, item) => {
+    if (!isDraft.value) return;
+
+    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleStockChange(item);
+        focusNextInput(idx);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        handleStockChange(item);
+        focusPrevInput(idx);
+    } else if (e.key === '=' || (e.key === 'm' && (e.ctrlKey || e.altKey))) {
+        e.preventDefault();
+        item.physical_stock = Number(item.system_stock);
+        handleStockChange(item);
+        focusNextInput(idx);
+    }
+};
+
+const handleGlobalKeydown = (e) => {
+    if (e.key === 'F2' || (e.ctrlKey && e.key === 'f')) {
+        e.preventDefault();
+        if (searchInputRef.value) {
+            searchInputRef.value.focus();
+            searchInputRef.value.select();
+        }
+    } else if (e.key === 'F9') {
+        e.preventDefault();
+        if (isDraft.value) {
+            showFinalModal.value = true;
+        }
+    }
+};
+
+onMounted(() => {
+    window.addEventListener('keydown', handleGlobalKeydown);
+    nextTick(() => {
+        if (isDraft.value && physicalInputs.value[0]) {
+            physicalInputs.value[0].focus();
+            physicalInputs.value[0].select();
+        }
+    });
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleGlobalKeydown);
+});
 
 const handleStockChange = async (item) => {
     if (!isDraft.value) return;
@@ -254,6 +334,7 @@ const reasonsList = ['Barang rusak','Barang hilang','Salah input','Salah pencata
                                         <span v-else class="badge bg-secondary fw-bold px-3 py-2">{{ opname.status }}</span>
                                     </div>
                                     <div class="d-flex align-items-center gap-4 text-muted" style="font-size: 0.88rem;">
+                                        <span class="text-dark fw-bold"><i class="bx bx-store me-1 text-primary"></i>{{ opname.outlet?.name || 'Apotek Utama' }}</span>
                                         <span><i class="bx bx-calendar me-1 text-primary"></i>{{ formatDate(opname.opname_date) }}</span>
                                         <span><i class="bx bx-user me-1 text-primary"></i>{{ opname.user?.name || '-' }}</span>
                                     </div>
@@ -261,6 +342,12 @@ const reasonsList = ['Barang rusak','Barang hilang','Salah input','Salah pencata
                             </div>
                             <!-- Right: Actions -->
                             <div class="d-flex gap-2 flex-wrap">
+                                <a :href="route('opname.print', opname.id)" target="_blank" class="btn btn-outline-dark fw-semibold">
+                                    <i class="bx bx-printer me-1"></i> Cetak SO
+                                </a>
+                                <a :href="route('opname.export_excel', opname.id)" target="_blank" class="btn btn-outline-success fw-semibold">
+                                    <i class="bx bx-file me-1"></i> Export Excel
+                                </a>
                                 <button v-if="isDraft" @click="submitMarkAllCounted" :disabled="markAllForm.processing"
                                     class="btn btn-outline-primary fw-semibold">
                                     <i class="bx bx-check-double me-1"></i> Tandai Semua Dihitung
@@ -374,9 +461,9 @@ const reasonsList = ['Barang rusak','Barang hilang','Salah input','Salah pencata
                                 <span class="input-group-text bg-light border-end-0 border">
                                     <i class="bx bx-search text-muted"></i>
                                 </span>
-                                <input type="text" v-model="searchQuery"
+                                <input type="text" ref="searchInputRef" v-model="searchQuery"
                                     class="form-control border-start-0"
-                                    placeholder="Cari nama obat, kode barcode...">
+                                    placeholder="Cari nama obat, kode barcode... (F2)">
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -402,6 +489,19 @@ const reasonsList = ['Barang rusak','Barang hilang','Salah input','Salah pencata
                             </select>
                         </div>
                     </div>
+                </div>
+
+                <!-- Keyboard Shortcut Toolbar Guide -->
+                <div v-if="isDraft" class="d-flex align-items-center justify-content-between bg-dark bg-opacity-75 text-white px-3 py-2 rounded-3 mb-3 shadow-xs border border-secondary border-opacity-25" style="font-size: 0.78rem;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="fw-bold text-warning me-1"><i class="bx bx-kbd me-1"></i>Pintasan Keyboard (Fast Input):</span>
+                        <span class="badge bg-secondary text-white"><kbd class="text-warning">Enter</kbd> / <kbd class="text-warning">↓</kbd> Simpan & Baris Bawah</span>
+                        <span class="badge bg-secondary text-white"><kbd class="text-warning">↑</kbd> Baris Atas</span>
+                        <span class="badge bg-secondary text-white"><kbd class="text-warning">=</kbd> Sama Dgn Sistem</span>
+                        <span class="badge bg-secondary text-white"><kbd class="text-warning">F2</kbd> Cari Obat</span>
+                        <span class="badge bg-secondary text-white"><kbd class="text-warning">F9</kbd> Final SO</span>
+                    </div>
+                    <span class="text-muted d-none d-lg-inline style-xs">⚡ Teks otomatis terblokir saat fokus untuk input cepat</span>
                 </div>
 
                 <!-- ===== MAIN TABLE ===== -->
@@ -479,13 +579,16 @@ const reasonsList = ['Barang rusak','Barang hilang','Salah input','Salah pencata
                                     <td class="text-center px-3" style="background: rgba(16,185,129,0.05);">
                                         <div v-if="isDraft">
                                             <input
+                                                :ref="el => setPhysicalInputRef(el, idx)"
                                                 type="number"
                                                 v-model.number="item.physical_stock"
                                                 min="0"
+                                                @focus="handleInputFocus"
+                                                @keydown="handleInputKeydown($event, idx, item)"
                                                 @change="handleStockChange(item)"
                                                 class="form-control form-control-sm font-monospace fw-bold text-center mx-auto"
                                                 :class="item.is_counted ? 'border-success' : 'border-warning'"
-                                                style="width: 82px; font-size: 1rem; border-width: 2px;"
+                                                style="width: 86px; font-size: 1rem; border-width: 2px;"
                                             >
                                         </div>
                                         <span v-else class="fw-bold text-dark font-monospace" style="font-size: 1rem;">

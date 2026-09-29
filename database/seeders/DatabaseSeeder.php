@@ -14,6 +14,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RolePermissionSeeder::class,
             PharmacyMasterSeeder::class,
+            UnitSeeder::class,
+            ExistingMasterStockPriceSeeder::class,
         ]);
     }
 }

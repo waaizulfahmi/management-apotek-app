@@ -20,7 +20,7 @@ class StockOpnameManualController extends Controller
      */
     public function index(Request $request)
     {
-        $query = StockOpname::with(['user', 'approvedBy'])
+        $query = StockOpname::with(['user', 'approvedBy', 'outlet'])
             ->orderBy('id', 'desc');
 
         if ($request->filled('search')) {
@@ -40,8 +40,14 @@ class StockOpnameManualController extends Controller
         $draftCount = StockOpname::whereIn(DB::raw('UPPER(status)'), ['DRAFT', 'COUNTING'])->count();
         $completedCount = StockOpname::whereIn(DB::raw('UPPER(status)'), ['COMPLETED', 'APPROVED'])->count();
 
+        $user = auth()->user();
+        $outlets = \App\Services\OutletService::getUserOutlets($user);
+        $activeOutletId = \App\Services\OutletService::getActiveOutletId($user);
+
         return Inertia::render('Opname/Index', [
             'opnames' => $opnames,
+            'outlets' => $outlets,
+            'activeOutletId' => $activeOutletId,
             'metrics' => [
                 'total' => $totalOpnames,
                 'draft' => $draftCount,
@@ -82,16 +88,18 @@ class StockOpnameManualController extends Controller
             }
 
             $userId = auth()->id();
+            $activeOutletId = \App\Services\OutletService::getActiveOutletId();
 
             $opname = StockOpname::create([
                 'opname_number' => $soNumber,
                 'opname_date' => now()->toDateString(),
                 'user_id' => $userId,
+                'outlet_id' => $activeOutletId,
                 'status' => 'DRAFT',
                 'notes' => $request->input('notes', 'Stok Opname Manual'),
             ]);
 
-            // Copy snapshot of all medicines (Master Barang)
+            // Copy snapshot of all medicines for this active outlet
             $medicines = Obat::with('supplier')->get();
 
             $totalSystemValue = 0;
@@ -100,7 +108,7 @@ class StockOpnameManualController extends Controller
             foreach ($medicines as $med) {
                 $unitName = $med->jenis_obat ? $med->jenis_obat : 'Unit';
                 $supplierName = $med->supplier_name ? $med->supplier_name : ($med->supplier ? $med->supplier->name : null);
-                $stok = (int) ($med->stok ?? 0);
+                $stok = (int) \App\Services\OutletService::getStock($med->kode, $activeOutletId);
                 $harga = (float) ($med->harga ?? 0);
                 $itemValue = $stok * $harga;
                 $totalSystemValue += $itemValue;
@@ -153,7 +161,7 @@ class StockOpnameManualController extends Controller
      */
     public function show(Request $request, $id)
     {
-        $opname = StockOpname::with(['user', 'approvedBy'])->findOrFail($id);
+        $opname = StockOpname::with(['user', 'approvedBy', 'outlet'])->findOrFail($id);
         if (in_array(strtolower($opname->status), ['draft', 'counting'])) {
             $opname->update(['status' => 'DRAFT']);
             $opname->status = 'DRAFT';
@@ -584,5 +592,221 @@ class StockOpnameManualController extends Controller
             'surplus_qty_total' => $surplusQtyTotal,
             'deficit_qty_total' => $deficitQtyTotal,
         ];
+    }
+
+    /**
+     * Print Official Stock Opname Report Document
+     */
+    public function print($id)
+    {
+        $opname = StockOpname::with(['user', 'approvedBy', 'outlet'])->findOrFail($id);
+        $items = StockOpnameItem::with(['medicine.supplier'])
+            ->where('stock_opname_id', $id)
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $outletName = $opname->outlet ? $opname->outlet->name : 'Apotek Utama';
+        $outletAddress = $opname->outlet ? ($opname->outlet->address ?: 'Alamat Outlet belum diatur') : '';
+
+        $html = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <title>Laporan Stok Opname #{$opname->opname_number}</title>
+            <style>
+                body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 0; padding: 20px; }
+                .header { border-bottom: 2px solid #3b6bff; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+                .title { font-size: 20px; font-weight: bold; color: #1e3c72; margin: 0; }
+                .subtitle { color: #64748b; font-size: 12px; margin-top: 4px; }
+                .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+                .info-label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+                .info-val { font-size: 13px; font-weight: bold; color: #0f172a; margin-top: 2px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th { background: #1e293b; color: #ffffff; padding: 8px 10px; text-align: left; font-size: 11px; }
+                td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+                .text-end { text-align: right; }
+                .text-center { text-align: center; }
+                .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+                .badge-success { background: #dcfce7; color: #15803d; }
+                .badge-danger { background: #fee2e2; color: #b91c1c; }
+                .badge-warning { background: #fef3c7; color: #b45309; }
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11px; }
+                .sig-box { text-align: center; width: 180px; }
+                .sig-line { margin-top: 50px; border-bottom: 1px dashed #94a3b8; }
+                @media print {
+                    .no-print { display: none !important; }
+                    body { padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class='no-print' style='margin-bottom: 15px; text-align: right;'>
+                <button onclick='window.print()' style='background: #3b6bff; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;'>🖨️ Cetak Dokumen</button>
+            </div>
+
+            <div class='header'>
+                <div>
+                    <h1 class='title'>DOKUMEN HASIL STOK OPNAME</h1>
+                    <div class='subtitle'>{$outletName} — {$outletAddress}</div>
+                </div>
+                <div style='text-align: right;'>
+                    <div style='font-size: 16px; font-weight: bold; color: #3b6bff;'>{$opname->opname_number}</div>
+                    <div class='subtitle'>Status: {$opname->status}</div>
+                </div>
+            </div>
+
+            <div class='info-grid'>
+                <div>
+                    <div class='info-label'>Tanggal SO</div>
+                    <div class='info-val'>{$opname->opname_date->format('d/m/Y')}</div>
+                </div>
+                <div>
+                    <div class='info-label'>Petugas / User</div>
+                    <div class='info-val'>" . ($opname->user ? $opname->user->name : '-') . "</div>
+                </div>
+                <div>
+                    <div class='info-label'>Total Items</div>
+                    <div class='info-val'>{$opname->total_items} Produk</div>
+                </div>
+                <div>
+                    <div class='info-label'>Selisih Nilai (HPP)</div>
+                    <div class='info-val' style='color: " . ($opname->difference_value < 0 ? '#dc2626' : '#16a34a') . ";'>Rp " . number_format($opname->difference_value, 0, ',', '.') . "</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style='width: 30px;'>#</th>
+                        <th>Kode</th>
+                        <th>Nama Produk</th>
+                        <th class='text-center'>Satuan</th>
+                        <th class='text-center'>Stok Sistem</th>
+                        <th class='text-center'>Stok Fisik</th>
+                        <th class='text-center'>Selisih</th>
+                        <th class='text-end'>Harga Beli (HPP)</th>
+                        <th class='text-end'>Nilai Selisih</th>
+                        <th>Alasan / Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody>";
+
+        $no = 1;
+        foreach ($items as $item) {
+            $diff = $item->difference;
+            $diffBadge = $diff === 0 ? "<span class='badge badge-success'>0</span>" : ($diff > 0 ? "<span class='badge badge-warning'>+{$diff}</span>" : "<span class='badge badge-danger'>{$diff}</span>");
+            $medName = $item->medicine ? $item->medicine->nama : $item->medicine_id;
+            $unitPriceStr = "Rp " . number_format($item->unit_price, 0, ',', '.');
+            $diffValStr = "Rp " . number_format($item->difference_value, 0, ',', '.');
+            $reason = $item->reason ?: ($item->notes ?: '-');
+
+            $html .= "
+                    <tr>
+                        <td class='text-center'>{$no}</td>
+                        <td><code>{$item->medicine_id}</code></td>
+                        <td><strong>{$medName}</strong></td>
+                        <td class='text-center'>{$item->unit_name}</td>
+                        <td class='text-center'>{$item->system_stock}</td>
+                        <td class='text-center'><strong>{$item->physical_stock}</strong></td>
+                        <td class='text-center'>{$diffBadge}</td>
+                        <td class='text-end'>{$unitPriceStr}</td>
+                        <td class='text-end'>{$diffValStr}</td>
+                        <td>{$reason}</td>
+                    </tr>";
+            $no++;
+        }
+
+        $html .= "
+                </tbody>
+            </table>
+
+            <div class='footer'>
+                <div class='sig-box'>
+                    <div>Petugas Stok Opname</div>
+                    <div class='sig-line'></div>
+                    <div style='margin-top: 4px; font-weight: bold;'>" . ($opname->user ? $opname->user->name : 'Petugas') . "</div>
+                </div>
+                <div class='sig-box'>
+                    <div>Apoteker / Head Outlet</div>
+                    <div class='sig-line'></div>
+                    <div style='margin-top: 4px; font-weight: bold;'>" . ($opname->approvedBy ? $opname->approvedBy->name : 'Penanggung Jawab') . "</div>
+                </div>
+            </div>
+            <script>window.onload = function() { setTimeout(function(){ window.print(); }, 500); }</script>
+        </body>
+        </html>";
+
+        return response($html)->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Export Stock Opname Report to Excel / CSV
+     */
+    public function exportExcel($id)
+    {
+        $opname = StockOpname::with(['user', 'outlet'])->findOrFail($id);
+        $items = StockOpnameItem::with('medicine')
+            ->where('stock_opname_id', $id)
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $filename = "Stok_Opname_{$opname->opname_number}_" . date('Ymd_His') . ".csv";
+
+        $headers = [
+            "Content-type" => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename={$filename}",
+            "Pragma" => "no-cache",
+            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+            "Expires" => "0"
+        ];
+
+        $callback = function() use ($opname, $items) {
+            $file = fopen('php://output', 'w');
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            fputcsv($file, ['DOKUMEN STOK OPNAME']);
+            fputcsv($file, ['No SO', $opname->opname_number]);
+            fputcsv($file, ['Outlet', $opname->outlet ? $opname->outlet->name : 'Apotek Utama']);
+            fputcsv($file, ['Tanggal', $opname->opname_date->format('Y-m-d')]);
+            fputcsv($file, ['Petugas', $opname->user ? $opname->user->name : '-']);
+            fputcsv($file, ['Status', $opname->status]);
+            fputcsv($file, []);
+
+            fputcsv($file, [
+                'No',
+                'Kode Produk',
+                'Nama Produk',
+                'Satuan',
+                'Stok Sistem',
+                'Stok Fisik',
+                'Selisih',
+                'Harga Beli HPP (Rp)',
+                'Nilai Selisih HPP (Rp)',
+                'Alasan Selisih',
+                'Keterangan'
+            ]);
+
+            $no = 1;
+            foreach ($items as $item) {
+                fputcsv($file, [
+                    $no++,
+                    $item->medicine_id,
+                    $item->medicine ? $item->medicine->nama : $item->medicine_id,
+                    $item->unit_name,
+                    $item->system_stock,
+                    $item->physical_stock,
+                    $item->difference,
+                    $item->unit_price,
+                    $item->difference_value,
+                    $item->reason ?: '',
+                    $item->notes ?: '',
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }
