@@ -82,7 +82,7 @@ const submit = () => {
 
                         <!-- Hero Main Headline -->
                         <div class="mt-4 pt-2 mb-4">
-                            <span class="badge bg-warning bg-opacity-20 text-warning px-3 py-1.5 rounded-pill mb-3 border border-warning border-opacity-30">
+                            <span class="badge bg-warning bg-opacity-25 text-warning px-3 py-2 rounded-pill mb-3 border border-warning border-opacity-25">
                                 <i class="bx bx-sparkles me-1"></i> System Ver 2.0
                             </span>
                             <h2 class="fw-extrabold display-6 text-white mb-3 leading-tight">
