@@ -69,63 +69,42 @@ const submit = () => {
                 <div class="col-lg-6 hero-pane p-4 p-md-5 d-flex flex-column justify-content-between text-white position-relative">
                     <div class="position-relative z-1">
                         <!-- Brand Logo Header -->
-                        <div class="d-flex align-items-center gap-3 mb-4">
-                            <div class="brand-icon-box rounded-3 p-3 bg-white bg-opacity-15 backdrop-blur d-flex align-items-center justify-content-center shadow-lg" style="width: 58px; height: 58px;">
-                                <img v-if="$page.props.app_settings?.pharmacy_logo" :src="$page.props.app_settings.pharmacy_logo" alt="Logo Apotek" style="max-height: 40px; max-width: 40px; object-fit: contain;">
-                                <i v-else class="bx bx-plus-medical text-warning fs-2"></i>
+                        <div class="d-flex align-items-center gap-3 mb-5">
+                            <div class="brand-icon-box rounded-3 p-2.5 bg-white bg-opacity-15 backdrop-blur d-flex align-items-center justify-content-center shadow-sm" style="width: 52px; height: 52px;">
+                                <img v-if="$page.props.app_settings?.pharmacy_logo" :src="$page.props.app_settings.pharmacy_logo" alt="Logo Apotek" style="max-height: 38px; max-width: 38px; object-fit: contain;">
+                                <i v-else class="bx bx-plus-medical text-primary fs-3"></i>
                             </div>
                             <div>
-                                <h3 class="fw-bold text-white mb-0 tracking-wide text-uppercase">{{ $page.props.app_settings?.pharmacy_name || 'APOTEK MEDIKA SORA' }}</h3>
-                                <small class="text-white-50 text-uppercase tracking-wider">Pharmacy Management System</small>
+                                <h4 class="fw-bold text-white mb-0 tracking-wide text-uppercase" style="letter-spacing: 0.04em;">{{ $page.props.app_settings?.pharmacy_name || 'APOTEK MEDIKA SORA' }}</h4>
+                                <small class="text-white-50 text-uppercase tracking-wider" style="font-size: 0.72rem; letter-spacing: 0.08em;">Pharmacy Management System</small>
                             </div>
                         </div>
 
                         <!-- Hero Main Headline -->
-                        <div class="mt-4 pt-2 mb-4">
-                            <span class="badge bg-warning bg-opacity-25 text-warning px-3 py-2 rounded-pill mb-3 border border-warning border-opacity-25">
-                                <i class="bx bx-sparkles me-1"></i> System Ver 2.0
-                            </span>
-                            <h2 class="fw-extrabold display-6 text-white mb-3 leading-tight">
-                                Kelola Apotek & Membership Pelanggan Lebih Cerdas
+                        <div class="my-auto py-2">
+                            <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-white bg-opacity-10 border border-white border-opacity-10 mb-3 backdrop-blur">
+                                <span class="status-indicator"></span>
+                                <span class="small text-white-75 fw-medium" style="font-size: 0.8rem;">Sistem Manajemen Terpadu</span>
+                            </div>
+                            <h2 class="fw-bold text-white mb-3" style="font-size: 2rem; line-height: 1.3; letter-spacing: -0.02em;">
+                                Kelola Apotek Lebih Cerdas &amp; Efisien
                             </h2>
-                            <p class="text-white-50 lead fs-6 mb-0">
-                                Platform terpadu pengadaan obat, kasir POS presisi, FEFO batch tracking, tiering loyalty member, dan laporan keuangan otomatis.
+                            <p class="text-white-50 mb-0" style="font-size: 0.95rem; line-height: 1.65; max-width: 92%;">
+                                Solusi modern untuk kemudahan transaksi kasir, pengelolaan inventori obat yang akurat, serta pelayanan farmasi yang lebih profesional.
                             </p>
                         </div>
                     </div>
 
-                    <!-- Feature Badges Pills -->
+                    <!-- Clean Bottom Info & Copyright -->
                     <div class="position-relative z-1 mt-4">
-                        <div class="row g-2 mb-4">
-                            <div class="col-6">
-                                <div class="feature-pill p-2.5 rounded-3 bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-10 d-flex align-items-center">
-                                    <i class="bx bx-cart text-warning me-2 fs-5"></i>
-                                    <span class="small fw-semibold">Kasir POS Presisi</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="feature-pill p-2.5 rounded-3 bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-10 d-flex align-items-center">
-                                    <i class="bx bx-shield-quarter text-warning me-2 fs-5"></i>
-                                    <span class="small fw-semibold">Warning Alergi Obat</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="feature-pill p-2.5 rounded-3 bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-10 d-flex align-items-center">
-                                    <i class="bx bx-award text-warning me-2 fs-5"></i>
-                                    <span class="small fw-semibold">Tierlist Member</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="feature-pill p-2.5 rounded-3 bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-10 d-flex align-items-center">
-                                    <i class="bx bx-bar-chart-alt-2 text-warning me-2 fs-5"></i>
-                                    <span class="small fw-semibold">Laporan Laba/Rugi</span>
-                                </div>
-                            </div>
+                        <div class="d-flex align-items-center gap-2 text-white-50 small mb-3">
+                            <i class="bx bx-shield-quarter text-info fs-5"></i>
+                            <span>Aman, Terenkripsi &amp; Terintegrasi</span>
                         </div>
 
                         <div class="small text-white-50 border-top border-white border-opacity-15 pt-3 d-flex justify-content-between align-items-center">
-                            <span>&copy; 2026 Apotek Medika Sora. All rights reserved.</span>
-                            <span class="badge bg-white bg-opacity-10 font-monospace">v2.4.0</span>
+                            <span>&copy; 2026 {{ $page.props.app_settings?.pharmacy_name || 'Apotek Medika Sora' }}. All rights reserved.</span>
+                            <span class="badge bg-white bg-opacity-10 font-monospace text-white-50">v2.4.0</span>
                         </div>
                     </div>
                 </div>
@@ -331,13 +310,14 @@ const submit = () => {
     -webkit-backdrop-filter: blur(12px);
 }
 
-/* Feature Pills */
-.feature-pill {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.feature-pill:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
-    transform: translateY(-2px);
+/* Status Indicator */
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #10b981;
+    display: inline-block;
 }
 
 /* Form Styling */
