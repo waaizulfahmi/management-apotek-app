@@ -45,7 +45,7 @@ class RbacSeeder extends Seeder
             'finance' => 'Keuangan',
             'reports' => 'Laporan',
             'settings' => 'Pengaturan',
-            'retur' => 'Retur Barang',
+            'retur' => 'Return Barang',
             'shift' => 'Manajemen Shift Kasir',
             'sales' => 'Laporan Penjualan',
         ];

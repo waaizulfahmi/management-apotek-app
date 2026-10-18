@@ -184,7 +184,8 @@ const deleteKasir = (id) => {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Foto Profil</label>
-                                <input type="file" class="form-control" @input="createForm.profil = $event.target.files[0]">
+                                <input type="file" class="form-control" @input="createForm.profil = $event.target.files[0]" accept="image/webp, image/jpeg, image/png, image/jpg, image/gif">
+                                <small class="text-muted d-block mt-1" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1 text-primary"></i>Foto otomatis dikonversi ke format <strong>WebP</strong>.</small>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -228,7 +229,8 @@ const deleteKasir = (id) => {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Foto Profil (Biarkan kosong jika tidak diubah)</label>
-                                <input type="file" class="form-control" @input="editForm.profil = $event.target.files[0]">
+                                <input type="file" class="form-control" @input="editForm.profil = $event.target.files[0]" accept="image/webp, image/jpeg, image/png, image/jpg, image/gif">
+                                <small class="text-muted d-block mt-1" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1 text-primary"></i>Foto baru otomatis dikonversi ke format <strong>WebP</strong>.</small>
                             </div>
                         </div>
                         <div class="modal-footer">

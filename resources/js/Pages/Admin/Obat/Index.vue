@@ -418,7 +418,8 @@ const formatCurrency = (val) => {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small fw-semibold">Gambar Obat</label>
-                                <input type="file" class="form-control rounded-3" @input="createForm.gambar = $event.target.files[0]" required>
+                                <input type="file" class="form-control rounded-3" @input="createForm.gambar = $event.target.files[0]" accept="image/webp, image/jpeg, image/png, image/jpg, image/gif" required>
+                                <small class="text-muted d-block mt-1" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1 text-primary"></i>Gambar otomatis dikonversi ke format <strong>WebP</strong> agar ringan & cepat.</small>
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
@@ -514,7 +515,8 @@ const formatCurrency = (val) => {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small fw-semibold">Gambar Obat (Biarkan kosong jika tidak diubah)</label>
-                                <input type="file" class="form-control rounded-3" @input="editForm.gambar = $event.target.files[0]">
+                                <input type="file" class="form-control rounded-3" @input="editForm.gambar = $event.target.files[0]" accept="image/webp, image/jpeg, image/png, image/jpg, image/gif">
+                                <small class="text-muted d-block mt-1" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1 text-primary"></i>Gambar baru akan otomatis dikonversi ke <strong>WebP</strong>.</small>
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">

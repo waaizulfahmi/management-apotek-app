@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\ImageService;
 use Inertia\Inertia;
 use Exception;
 
@@ -41,15 +42,18 @@ class SettingController extends Controller
         try {
             // Handle logo file upload if provided
             if ($request->hasFile('pharmacy_logo')) {
-                $file = $request->file('pharmacy_logo');
-                $filename = 'logo_' . time() . '.' . $file->getClientOriginalExtension();
-                
-                $destinationPath = public_path('uploads/logo');
-                if (!file_exists($destinationPath)) {
-                    mkdir($destinationPath, 0755, true);
+                // Delete old logo file if exists
+                $oldLogo = DB::table('settings')->where('key', 'pharmacy_logo')->value('value');
+                if ($oldLogo && file_exists(public_path($oldLogo))) {
+                    ImageService::deleteFile(public_path($oldLogo));
                 }
-                
-                $file->move($destinationPath, $filename);
+
+                $filename = ImageService::uploadAsWebp(
+                    $request->file('pharmacy_logo'),
+                    public_path('uploads/logo'),
+                    85,
+                    'logo'
+                );
                 $logoUrl = '/uploads/logo/' . $filename;
 
                 DB::table('settings')->updateOrInsert(

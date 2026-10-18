@@ -54,27 +54,33 @@ const handleLogoError = () => {
 };
 
 let clockInterval = null;
+const timeHoursMinutes = ref('--:--');
+const timeSeconds = ref('--');
 
 const updateClock = () => {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
+    timeHoursMinutes.value = `${hours}:${minutes}`;
+    timeSeconds.value = seconds;
     currentTime.value = `${hours}:${minutes}:${seconds} WIB`;
 };
 
 // Full Day Name & Date in Indonesian
-const currentDateText = computed(() => {
-    const now = new Date();
+const currentDayName = computed(() => {
     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    
-    const dayName = days[now.getDay()];
-    const dateNum = now.getDate();
-    const monthName = months[now.getMonth()];
-    const year = now.getFullYear();
+    return days[new Date().getDay()];
+});
 
-    return `${dayName}, ${dateNum} ${monthName} ${year}`;
+const currentDateOnly = computed(() => {
+    const now = new Date();
+    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    return `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+});
+
+const currentDateText = computed(() => {
+    return `${currentDayName.value}, ${currentDateOnly.value}`;
 });
 
 const toggleSidebar = () => {
@@ -94,9 +100,11 @@ const greetingText = computed(() => {
 const toggleDarkMode = () => {
     isDarkMode.value = !isDarkMode.value;
     if (isDarkMode.value) {
+        document.documentElement.classList.add('dark-mode');
         document.body.classList.add('dark-mode');
         localStorage.setItem('theme', 'dark');
     } else {
+        document.documentElement.classList.remove('dark-mode');
         document.body.classList.remove('dark-mode');
         localStorage.setItem('theme', 'light');
     }
@@ -130,6 +138,7 @@ onMounted(() => {
     clockInterval = setInterval(updateClock, 1000);
 
     if (localStorage.getItem('theme') === 'dark') {
+        document.documentElement.classList.add('dark-mode');
         document.body.classList.add('dark-mode');
         isDarkMode.value = true;
     }
@@ -159,12 +168,12 @@ const logout = () => {
 </script>
 
 <template>
-    <div class="layout-container">
+    <div class="layout-container" :class="{ 'dark-mode': isDarkMode }">
         <!-- Top Navbar Header -->
-        <header class="top-header shadow-xs d-flex justify-content-between align-items-center px-4" :class="{ 'collapsed': isCollapsed }">
+        <header class="top-header shadow-xs d-flex justify-content-between align-items-center px-4" :class="{ 'collapsed': isCollapsed, 'dark-mode': isDarkMode }">
             <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-sm btn-light border-0 shadow-xs" @click="toggleSidebar">
-                    <i class="bx bx-menu fs-4 text-secondary"></i>
+                <button class="btn btn-sm btn-light border-0 shadow-xs" @click="toggleSidebar" title="Toggle Sidebar">
+                    <i class="bx bx-menu-alt-left fs-4 text-secondary"></i>
                 </button>
                 <div>
                     <h6 class="fw-bold text-dark mb-0">
@@ -211,16 +220,35 @@ const logout = () => {
                     </ul>
                 </div>
 
-                <!-- Premium Redesigned Real-Time Clock & Date Widget -->
-                <div class="clock-widget d-flex align-items-center gap-2 px-3 py-1.5 rounded-pill border">
-                    <div class="d-flex align-items-center gap-1.5 pe-2 border-end border-secondary border-opacity-25">
-                        <i class="bx bx-calendar-event text-primary fs-5"></i>
-                        <span class="fw-semibold date-text" style="font-size: 0.82rem; letter-spacing: 0.01em;">{{ currentDateText }}</span>
+                <!-- Ultra-Modern Real-Time Clock & Date Widget -->
+                <div class="clock-widget d-flex align-items-center shadow-xs" :class="{ 'is-dark': isDarkMode }">
+                    <!-- Date Segment -->
+                    <div class="clock-widget__date d-flex align-items-center gap-2">
+                        <div class="clock-widget__icon-box">
+                            <i class="bx bx-calendar-event"></i>
+                        </div>
+                        <div class="clock-widget__date-text">
+                            <span class="day-label">{{ currentDayName }}</span>
+                            <span class="date-sep">,</span>
+                            <span class="date-label">{{ currentDateOnly }}</span>
+                        </div>
                     </div>
-                    <div class="d-flex align-items-center gap-2 ps-1">
-                        <span class="live-pulse-dot" title="Live Real-Time Clock"></span>
-                        <i class="bx bx-time-five text-primary fs-5"></i>
-                        <span class="fw-bold time-text font-monospace fs-6">{{ currentTime }}</span>
+
+                    <!-- Sleek Gradient Divider -->
+                    <div class="clock-widget__divider"></div>
+
+                    <!-- Live Clock Segment -->
+                    <div class="clock-widget__time d-flex align-items-center gap-2">
+                        <div class="live-pulse-container" title="Live Real-Time Clock">
+                            <span class="pulse-beacon"></span>
+                            <span class="pulse-dot"></span>
+                        </div>
+                        <div class="clock-widget__digits font-monospace">
+                            <span class="time-hm">{{ timeHoursMinutes }}</span>
+                            <span class="time-blink">:</span>
+                            <span class="time-s">{{ timeSeconds }}</span>
+                        </div>
+                        <span class="tz-badge">WIB</span>
                     </div>
                 </div>
 
@@ -248,7 +276,7 @@ const logout = () => {
         </header>
         <!-- Sidebar -->
         <aside class="sidebar shadow-sm" :class="{ 'collapsed': isCollapsed }">
-            <div class="sidebar__header d-flex align-items-center justify-content-between p-3 border-bottom border-white border-opacity-10 mb-3">
+            <div class="sidebar__header d-flex align-items-center p-3 border-bottom border-white border-opacity-10 mb-3" :class="{ 'justify-content-center': isCollapsed, 'justify-content-start': !isCollapsed }">
                 <div class="d-flex align-items-center gap-2 overflow-hidden">
                     <div class="brand-logo-wrapper d-flex align-items-center justify-content-center rounded-3 bg-white bg-opacity-15 p-1.5 flex-shrink-0 shadow-xs" style="width: 38px; height: 38px;">
                         <img v-if="$page.props.app_settings?.pharmacy_logo && !hasLogoError"
@@ -266,8 +294,6 @@ const logout = () => {
                         <small class="text-white-50 d-block text-truncate" style="font-size: 0.65rem;">Pharmacy System</small>
                     </div>
                 </div>
-
-                <i class="bx bx-menu hamburger text-white fs-3 cursor-pointer m-0 p-1" @click="toggleSidebar" title="Toggle Sidebar"></i>
             </div>
 
             <div class="nav-links-wrapper" ref="navWrapper" @scroll="handleSidebarScroll">
@@ -493,7 +519,7 @@ const logout = () => {
         </aside>
 
         <!-- Main Content Area -->
-        <main class="main-wrapper" :class="{ 'expanded': isCollapsed }">
+        <main class="main-wrapper" :class="{ 'expanded': isCollapsed, 'dark-mode': isDarkMode }">
             <!-- Warning Banner for Inactive Outlet -->
             <div v-if="activeOutlet && (activeOutlet.status === 'INACTIVE' || !activeOutlet.is_active)"
                  class="alert alert-danger border-2 border-danger shadow-sm mx-4 mt-3 mb-0 d-flex align-items-center gap-3 rounded-3" role="alert">
@@ -564,20 +590,13 @@ const logout = () => {
 .sidebar__header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 10px 16px;
+    min-height: 58px;
 }
 
-.sidebar__header .hamburger {
-    color: #2d3748;
-    font-size: 1.8rem;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.sidebar__header .hamburger:hover {
-    transform: scale(1.1);
-    color: #3b6bff;
+.sidebar.collapsed .sidebar__header {
+    justify-content: center;
+    padding: 10px 0;
 }
 
 .sidebar__logo img {
@@ -650,21 +669,47 @@ const logout = () => {
     color: #ffffff !important;
 }
 
+.layout-container {
+    min-height: 100vh;
+    background-color: #f4f7fc;
+    transition: background-color 0.3s ease;
+}
+
 .main-wrapper {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     padding-top: 64px;
     margin-left: 260px;
-    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background-color: #f4f7fc;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
 }
 
 .main-wrapper.expanded {
     margin-left: 75px;
 }
 
+/* Dark Mode Overrides for Layout & Main Background */
+.layout-container.dark-mode,
+.main-wrapper.dark-mode,
+:global(body.dark-mode) .layout-container,
+:global(body.dark-mode) .main-wrapper,
+:global(html.dark-mode) .layout-container,
+:global(html.dark-mode) .main-wrapper {
+    background-color: #0f172a !important;
+}
+
 .layout-footer {
     margin-top: auto !important;
+}
+
+:global(body.dark-mode) .layout-footer {
+    border-color: #334155 !important;
+    color: #94a3b8 !important;
+}
+
+:global(body.dark-mode) .layout-footer strong {
+    color: #f8fafc !important;
 }
 
 :deep(.content) {
@@ -673,68 +718,236 @@ const logout = () => {
     padding: 20px !important;
 }
 
-/* Premium Clock Widget Redesign */
+/* ============================================================ */
+/* ULTRA-MODERN REAL-TIME CLOCK & DATE WIDGET                   */
+/* ============================================================ */
 .clock-widget {
-    background: rgba(241, 245, 249, 0.95);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(59, 107, 255, 0.25) !important;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 9999px;
+    padding: 5px 14px 5px 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-}
-
-.date-text {
-    color: #1e293b !important;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+    user-select: none;
 }
 
 .clock-widget:hover {
-    border-color: rgba(59, 107, 255, 0.5) !important;
-    box-shadow: 0 6px 20px rgba(59, 107, 255, 0.15);
+    border-color: rgba(59, 107, 255, 0.35);
+    box-shadow: 0 4px 18px rgba(59, 107, 255, 0.12);
     transform: translateY(-1px);
 }
 
-.live-pulse-dot {
-    width: 8px;
-    height: 8px;
-    background-color: #10b981;
+/* Icon Box */
+.clock-widget__icon-box {
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    display: inline-block;
-    box-shadow: 0 0 0 rgba(16, 185, 129, 0.6);
-    animation: pulse-dot 1.8s infinite;
+    background: linear-gradient(135deg, rgba(59, 107, 255, 0.12), rgba(59, 107, 255, 0.05));
+    color: #3b6bff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
 }
 
-@keyframes pulse-dot {
-    0% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-    }
-    70% {
-        transform: scale(1);
-        box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
-    }
-    100% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-    }
+.clock-widget:hover .clock-widget__icon-box {
+    transform: rotate(-8deg) scale(1.05);
 }
 
-.time-text {
-    color: #1d4ed8 !important;
+/* Date Styling */
+.clock-widget__date-text {
+    font-size: 0.82rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.day-label {
     font-weight: 700;
-    letter-spacing: 0.05em;
+    color: #1e293b;
+    letter-spacing: -0.01em;
 }
 
-/* Dark Mode Overrides */
+.date-sep {
+    color: #94a3b8;
+    margin-right: 4px;
+}
+
+.date-label {
+    font-weight: 500;
+    color: #475569;
+}
+
+/* Divider */
+.clock-widget__divider {
+    width: 1px;
+    height: 20px;
+    margin: 0 12px;
+    background: linear-gradient(180deg, transparent, rgba(148, 163, 184, 0.35), transparent);
+    flex-shrink: 0;
+}
+
+/* Live Pulse Beacon */
+.live-pulse-container {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pulse-beacon {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: #10b981;
+    opacity: 0.75;
+    animation: live-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes live-ping {
+    75%, 100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+
+/* Digits & Time */
+.clock-widget__digits {
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.time-hm {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.time-blink {
+    color: #3b6bff;
+    font-weight: 700;
+    animation: blink-soft 1s ease-in-out infinite alternate;
+}
+
+@keyframes blink-soft {
+    0% { opacity: 0.35; }
+    100% { opacity: 1; }
+}
+
+.time-s {
+    font-weight: 600;
+    color: #3b6bff;
+}
+
+/* Timezone Badge */
+.tz-badge {
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 1.5px 6px;
+    border-radius: 6px;
+    background: rgba(59, 107, 255, 0.1);
+    color: #2563eb;
+    border: 1px solid rgba(59, 107, 255, 0.2);
+    text-transform: uppercase;
+}
+
+/* Responsive Hide Rules */
+@media (max-width: 1200px) {
+    .clock-widget .date-label {
+        display: none;
+    }
+}
+@media (max-width: 991px) {
+    .clock-widget__date,
+    .clock-widget__divider {
+        display: none !important;
+    }
+}
+@media (max-width: 768px) {
+    .clock-widget {
+        display: none !important;
+    }
+}
+
+/* ============================================================ */
+/* DARK MODE OVERRIDES (Direct class & global body support)     */
+/* ============================================================ */
+.clock-widget.is-dark,
 :global(body.dark-mode) .clock-widget {
-    background: rgba(15, 23, 42, 0.92) !important;
-    border: 1px solid rgba(255, 255, 255, 0.18) !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+    background: rgba(15, 23, 42, 0.75) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
-:global(body.dark-mode) .date-text {
+.clock-widget.is-dark:hover,
+:global(body.dark-mode) .clock-widget:hover {
+    border-color: rgba(56, 189, 248, 0.45) !important;
+    box-shadow: 0 6px 24px rgba(56, 189, 248, 0.18) !important;
+}
+
+.clock-widget.is-dark .clock-widget__icon-box,
+:global(body.dark-mode) .clock-widget .clock-widget__icon-box {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(56, 189, 248, 0.05)) !important;
+    color: #38bdf8 !important;
+}
+
+.clock-widget.is-dark .day-label,
+:global(body.dark-mode) .clock-widget .day-label {
     color: #f8fafc !important;
 }
 
-:global(body.dark-mode) .time-text {
+.clock-widget.is-dark .date-sep,
+:global(body.dark-mode) .clock-widget .date-sep {
+    color: #64748b !important;
+}
+
+.clock-widget.is-dark .date-label,
+:global(body.dark-mode) .clock-widget .date-label {
+    color: #cbd5e1 !important;
+}
+
+.clock-widget.is-dark .clock-widget__divider,
+:global(body.dark-mode) .clock-widget .clock-widget__divider {
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.18), transparent) !important;
+}
+
+.clock-widget.is-dark .time-hm,
+:global(body.dark-mode) .clock-widget .time-hm {
+    color: #f8fafc !important;
+}
+
+.clock-widget.is-dark .time-blink,
+:global(body.dark-mode) .clock-widget .time-blink,
+.clock-widget.is-dark .time-s,
+:global(body.dark-mode) .clock-widget .time-s {
     color: #38bdf8 !important;
+}
+
+.clock-widget.is-dark .tz-badge,
+:global(body.dark-mode) .clock-widget .tz-badge {
+    background: rgba(56, 189, 248, 0.15) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
 }
 </style>

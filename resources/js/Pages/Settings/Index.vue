@@ -117,7 +117,7 @@ const resetLogo = () => {
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-dark mb-1">Unggah Logo Baru</label>
                                     <input type="file" class="form-control" @change="handleLogoChange" accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp">
-                                    <small class="text-muted d-block mt-1">Format: PNG, JPG, WEBP, atau SVG. Ukuran Maksimal: <strong>2 MB</strong>.</small>
+                                    <small class="text-muted d-block mt-1">Format: PNG, JPG, WEBP, atau SVG. Gambar otomatis dioptimalkan ke <strong>WebP</strong> (Maks: 2 MB).</small>
                                 </div>
 
                                 <button v-if="props.settings?.pharmacy_logo" type="button" @click="resetLogo" class="btn btn-outline-danger btn-sm w-100 fw-semibold">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -49,7 +50,7 @@ class KasirController extends Controller
             'password' => 'required|min:4',
             'email' => 'required|email|unique:users,email',
             'no_hp' => 'required|max:15',
-            'profil' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'profil' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);
 
         $data = $request->all();
@@ -57,9 +58,7 @@ class KasirController extends Controller
         $data['password'] = Hash::make($request->password);
 
         if ($request->hasFile('profil')) {
-            $imageName = time().'.'.$request->profil->extension();  
-            $request->profil->move(public_path('Assets/Kasir'), $imageName);
-            $data['profil'] = $imageName;
+            $data['profil'] = ImageService::uploadAsWebp($request->file('profil'), public_path('Assets/Kasir'));
         }
 
         User::create($data);
@@ -80,7 +79,7 @@ class KasirController extends Controller
             'email' => ['required', 'email', Rule::unique('users')->ignore($kasir->id)],
             'password' => 'nullable|min:4',
             'no_hp' => 'required|max:15',
-            'profil' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'profil' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);
 
         $data = $request->except('password');
@@ -90,9 +89,10 @@ class KasirController extends Controller
         }
 
         if ($request->hasFile('profil')) {
-            $imageName = time().'.'.$request->profil->extension();  
-            $request->profil->move(public_path('Assets/Kasir'), $imageName);
-            $data['profil'] = $imageName;
+            if (!empty($kasir->profil)) {
+                ImageService::deleteFile(public_path('Assets/Kasir/' . $kasir->profil));
+            }
+            $data['profil'] = ImageService::uploadAsWebp($request->file('profil'), public_path('Assets/Kasir'));
         }
 
         $kasir->update($data);

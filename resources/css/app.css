@@ -111,7 +111,12 @@ body {
 /* ============================================================ */
 /* DARK MODE THEME STYLING                                      */
 /* ============================================================ */
-body.dark-mode {
+html.dark-mode,
+body.dark-mode,
+body.dark-mode #app,
+body.dark-mode .layout-container,
+body.dark-mode .main-wrapper,
+body.dark-mode .content {
     background-color: #0f172a !important;
     color: #e2e8f0 !important;
 }

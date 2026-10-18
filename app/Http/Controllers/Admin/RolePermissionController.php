@@ -33,7 +33,7 @@ class RolePermissionController extends Controller
             'opname' => 'Stok Opname',
             'stock_card' => 'Kartu Stok',
             'pos' => 'Penjualan / POS',
-            'retur' => 'Retur Penjualan & Barang',
+            'retur' => 'Return Barang',
             'po' => 'Pembelian / PO',
             'suppliers' => 'Supplier / PBF',
             'membership' => 'Membership',

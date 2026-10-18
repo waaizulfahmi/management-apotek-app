@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Obat;
+use App\Services\ImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
@@ -95,7 +96,7 @@ class ObatController extends Controller
         $request->validate([
             'kode' => 'required|unique:obats,kode|max:10',
             'nama' => 'required|max:100',
-            'gambar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'gambar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'jenis_obat' => 'required',
             'kategori' => 'required',
             'harga' => 'required|numeric',
@@ -119,9 +120,7 @@ class ObatController extends Controller
         }
 
         if ($request->hasFile('gambar')) {
-            $imageName = time().'.'.$request->gambar->extension();  
-            $request->gambar->move(public_path('Assets/Obat'), $imageName);
-            $data['gambar'] = $imageName;
+            $data['gambar'] = ImageService::uploadAsWebp($request->file('gambar'), public_path('Assets/Obat'));
         }
 
         $obat = Obat::create($data);
@@ -169,7 +168,7 @@ class ObatController extends Controller
 
         $request->validate([
             'nama' => 'required|max:100',
-            'gambar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'gambar' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'jenis_obat' => 'required',
             'kategori' => 'required',
             'harga' => 'required|numeric',
@@ -194,9 +193,10 @@ class ObatController extends Controller
         }
 
         if ($request->hasFile('gambar')) {
-            $imageName = time().'.'.$request->gambar->extension();  
-            $request->gambar->move(public_path('Assets/Obat'), $imageName);
-            $data['gambar'] = $imageName;
+            if (!empty($obat->gambar)) {
+                ImageService::deleteFile(public_path('Assets/Obat/' . $obat->gambar));
+            }
+            $data['gambar'] = ImageService::uploadAsWebp($request->file('gambar'), public_path('Assets/Obat'));
         }
 
         $obat->update($data);

@@ -67,7 +67,8 @@ const permissionsByModule = computed(() => {
 
 const moduleLabels = {
     dashboard: 'Dashboard', users: 'User & Access', products: 'Produk', stock: 'Stok',
-    opname: 'Stok Opname', stock_card: 'Kartu Stok', pos: 'Penjualan / POS', po: 'Pembelian / PO',
+    opname: 'Stok Opname', stock_card: 'Kartu Stok', pos: 'Penjualan / POS',
+    retur: 'Return Barang', po: 'Pembelian / PO',
     suppliers: 'Supplier / PBF', membership: 'Membership', finance: 'Keuangan', reports: 'Laporan',
     settings: 'Pengaturan',
 };
@@ -229,8 +230,11 @@ const allActions = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
             <!-- TAB: Role & Permission -->
             <div v-if="activeTab === 'permissions'">
                 <div class="card border-0 shadow-sm rounded-3">
-                    <div class="card-header bg-white pt-3 px-4">
+                    <div class="card-header bg-white pt-3 px-4 d-flex justify-content-between align-items-center">
                         <h6 class="fw-bold mb-0"><i class="bx bx-shield-quarter me-2 text-primary"></i>Hak Akses User</h6>
+                        <Link :href="route('admin.roles.index')" class="btn btn-sm btn-outline-primary">
+                            <i class="bx bx-slider me-1"></i>Kelola Hak Akses Role
+                        </Link>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
