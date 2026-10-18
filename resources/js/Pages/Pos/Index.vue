@@ -1041,7 +1041,7 @@ const printReceipt = () => {
                                                 style="width: 44px; height: 44px; object-fit: cover;"
                                             >
                                             <div class="text-truncate">
-                                                <h6 class="fw-bold mb-1 text-truncate" style="font-size: 0.92rem;">
+                                                <h6 class="fw-bold mb-1 text-truncate pos-med-name" style="font-size: 0.92rem;">
                                                     {{ med.nama }}
                                                     <span v-if="searchIndex === idx && activeZone === 'search'" class="badge bg-primary text-white ms-2 font-monospace" style="font-size: 0.68rem;">
                                                         <i class="bx bx-corner-down-left me-1"></i>Enter: Tambah
@@ -1063,7 +1063,7 @@ const printReceipt = () => {
 
                                         <div class="d-flex align-items-center gap-3 ms-2 flex-shrink-0">
                                             <div class="text-end">
-                                                <div class="fw-bold text-success fs-6">{{ formatCurrency(med.harga) }}</div>
+                                                <div class="fw-bold text-success fs-6 pos-med-price">{{ formatCurrency(med.harga) }}</div>
                                                 <small class="text-muted" style="font-size: 0.75rem;">/ {{ med.jenis_obat || 'Unit' }}</small>
                                             </div>
                                             <button 
@@ -1855,8 +1855,64 @@ const printReceipt = () => {
     box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
 }
 
-.pos-item-row:hover {
+.pos-item-row:hover,
+.pos-item-row.active-search-item {
     background-color: #f1f5f9 !important;
+}
+
+/* Ensure text obat & price are never white when hovered or active */
+.pos-item-row:hover .pos-med-name,
+.pos-item-row:hover h6,
+.pos-item-row.active-search-item .pos-med-name,
+.pos-item-row.active-search-item h6,
+:global(body.dark-mode) .pos-item-row:hover .pos-med-name,
+:global(body.dark-mode) .pos-item-row:hover h6,
+:global(body.dark-mode) .pos-item-row.active-search-item .pos-med-name,
+:global(body.dark-mode) .pos-item-row.active-search-item h6,
+:global(html.dark-mode) .pos-item-row:hover .pos-med-name,
+:global(html.dark-mode) .pos-item-row:hover h6,
+:global(html.dark-mode) .pos-item-row.active-search-item .pos-med-name,
+:global(html.dark-mode) .pos-item-row.active-search-item h6 {
+    color: #0f172a !important;
+}
+
+.pos-item-row:hover .pos-med-price,
+.pos-item-row:hover .text-success,
+.pos-item-row.active-search-item .pos-med-price,
+.pos-item-row.active-search-item .text-success,
+:global(body.dark-mode) .pos-item-row:hover .pos-med-price,
+:global(body.dark-mode) .pos-item-row:hover .text-success,
+:global(body.dark-mode) .pos-item-row.active-search-item .pos-med-price,
+:global(body.dark-mode) .pos-item-row.active-search-item .text-success,
+:global(html.dark-mode) .pos-item-row:hover .pos-med-price,
+:global(html.dark-mode) .pos-item-row:hover .text-success,
+:global(html.dark-mode) .pos-item-row.active-search-item .pos-med-price,
+:global(html.dark-mode) .pos-item-row.active-search-item .text-success {
+    color: #16a34a !important;
+}
+
+.pos-item-row:hover .text-muted,
+.pos-item-row.active-search-item .text-muted,
+:global(body.dark-mode) .pos-item-row:hover .text-muted,
+:global(body.dark-mode) .pos-item-row.active-search-item .text-muted,
+:global(html.dark-mode) .pos-item-row:hover .text-muted,
+:global(html.dark-mode) .pos-item-row.active-search-item .text-muted {
+    color: #64748b !important;
+}
+
+/* Default in Dark Mode when NOT hovered */
+:global(body.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .pos-med-name,
+:global(body.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) h6,
+:global(html.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .pos-med-name,
+:global(html.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) h6 {
+    color: #f8fafc !important;
+}
+
+:global(body.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .pos-med-price,
+:global(body.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .text-success,
+:global(html.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .pos-med-price,
+:global(html.dark-mode) .pos-item-row:not(:hover):not(.active-search-item) .text-success {
+    color: #22c55e !important;
 }
 
 .pos-input-field:focus {

@@ -133,9 +133,61 @@ body.dark-mode .list-group-item {
     border-color: #334155 !important;
 }
 
-body.dark-mode .list-group-item h6,
-body.dark-mode .list-group-item div {
-    color: #f8fafc !important;
+body.dark-mode .list-group-item h6 {
+    color: #f8fafc;
+}
+
+body.dark-mode .text-success {
+    color: #22c55e !important;
+}
+
+/* POS Medicine Item Hover & Active text colors */
+.pos-item-row:hover,
+body.dark-mode .pos-item-row:hover,
+html.dark-mode .pos-item-row:hover,
+.pos-item-row.active-search-item,
+body.dark-mode .pos-item-row.active-search-item,
+html.dark-mode .pos-item-row.active-search-item {
+    background-color: #f1f5f9 !important;
+}
+
+.pos-item-row:hover .pos-med-name,
+.pos-item-row:hover h6,
+body.dark-mode .pos-item-row:hover .pos-med-name,
+body.dark-mode .pos-item-row:hover h6,
+html.dark-mode .pos-item-row:hover .pos-med-name,
+html.dark-mode .pos-item-row:hover h6,
+.pos-item-row.active-search-item .pos-med-name,
+.pos-item-row.active-search-item h6,
+body.dark-mode .pos-item-row.active-search-item .pos-med-name,
+body.dark-mode .pos-item-row.active-search-item h6,
+html.dark-mode .pos-item-row.active-search-item .pos-med-name,
+html.dark-mode .pos-item-row.active-search-item h6 {
+    color: #0f172a !important;
+}
+
+.pos-item-row:hover .pos-med-price,
+.pos-item-row:hover .text-success,
+body.dark-mode .pos-item-row:hover .pos-med-price,
+body.dark-mode .pos-item-row:hover .text-success,
+html.dark-mode .pos-item-row:hover .pos-med-price,
+html.dark-mode .pos-item-row:hover .text-success,
+.pos-item-row.active-search-item .pos-med-price,
+.pos-item-row.active-search-item .text-success,
+body.dark-mode .pos-item-row.active-search-item .pos-med-price,
+body.dark-mode .pos-item-row.active-search-item .text-success,
+html.dark-mode .pos-item-row.active-search-item .pos-med-price,
+html.dark-mode .pos-item-row.active-search-item .text-success {
+    color: #16a34a !important;
+}
+
+.pos-item-row:hover .text-muted,
+body.dark-mode .pos-item-row:hover .text-muted,
+html.dark-mode .pos-item-row:hover .text-muted,
+.pos-item-row.active-search-item .text-muted,
+body.dark-mode .pos-item-row.active-search-item .text-muted,
+html.dark-mode .pos-item-row.active-search-item .text-muted {
+    color: #64748b !important;
 }
 
 body.dark-mode .btn-light,
