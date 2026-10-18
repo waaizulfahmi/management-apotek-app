@@ -382,6 +382,14 @@ const logout = () => {
                         <i class="bx bx-purchase-tag-alt sidebar__icon"></i>
                         <span class="sidebar__text">Master Satuan</span>
                     </Link>
+                    <Link :href="route('admin.medicine-types.index')" class="sidebar__link" :class="{ 'active': route().current('admin.medicine-types.*') }">
+                        <i class="bx bx-shape-polygon sidebar__icon"></i>
+                        <span class="sidebar__text">Master Jenis Obat</span>
+                    </Link>
+                    <Link :href="route('admin.medicine-categories.index')" class="sidebar__link" :class="{ 'active': route().current('admin.medicine-categories.*') }">
+                        <i class="bx bx-category-alt sidebar__icon"></i>
+                        <span class="sidebar__text">Master Kategori Obat</span>
+                    </Link>
                     <Link :href="route('suppliers.index')" class="sidebar__link" :class="{ 'active': route().current('suppliers.*') }">
                         <i class="bx bxs-truck sidebar__icon fs-5"></i>
                         <span class="sidebar__text">Supplier PBF</span>

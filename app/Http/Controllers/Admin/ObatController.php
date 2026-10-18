@@ -67,11 +67,15 @@ class ObatController extends Controller
 
         $suppliers = \App\Models\Supplier::select('id', 'name', 'code')->get();
         $units = \App\Models\Unit::where('is_active', true)->get();
+        $medicineTypes = \App\Models\MedicineType::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']);
+        $medicineCategories = \App\Models\MedicineCategory::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']);
 
         return Inertia::render('Admin/Obat/Index', [
             'obats' => $obats,
             'suppliers' => $suppliers,
             'units' => $units,
+            'medicineTypes' => $medicineTypes,
+            'medicineCategories' => $medicineCategories,
             'filters' => ['search' => $search]
         ]);
     }

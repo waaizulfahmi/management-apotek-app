@@ -12,6 +12,9 @@ use App\Models\Purchase;
 use App\Models\ProductReturn;
 use App\Models\StockOpname;
 use App\Models\Voucher;
+use App\Models\Unit;
+use App\Models\MedicineType;
+use App\Models\MedicineCategory;
 use App\Services\AuditLogService;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -83,6 +86,27 @@ class TrashManagerController extends Controller
                 'code_key' => 'code',
                 'name_key' => 'name',
                 'unique_fields' => ['code'],
+            ],
+            'Satuan' => [
+                'model' => Unit::class,
+                'id_key' => 'id',
+                'code_key' => 'id',
+                'name_key' => 'name',
+                'unique_fields' => ['name'],
+            ],
+            'Jenis Obat' => [
+                'model' => MedicineType::class,
+                'id_key' => 'id',
+                'code_key' => 'id',
+                'name_key' => 'name',
+                'unique_fields' => ['name'],
+            ],
+            'Kategori Obat' => [
+                'model' => MedicineCategory::class,
+                'id_key' => 'id',
+                'code_key' => 'id',
+                'name_key' => 'name',
+                'unique_fields' => ['name'],
             ],
         ];
     }

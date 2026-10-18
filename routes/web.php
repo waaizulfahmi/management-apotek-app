@@ -52,6 +52,22 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/units/{id}/toggle-status', [\App\Http\Controllers\Admin\UnitController::class, 'toggleStatus'])->name('units.toggle-status');
     Route::delete('/units/{id}', [\App\Http\Controllers\Admin\UnitController::class, 'destroy'])->name('units.destroy');
 
+    // Master Jenis Obat (Bentuk Sediaan) Module
+    Route::get('/medicine-types', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'index'])->name('medicine-types.index');
+    Route::post('/medicine-types', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'store'])->name('medicine-types.store');
+    Route::post('/medicine-types/quick', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'quickStore'])->name('medicine-types.quick-store');
+    Route::put('/medicine-types/{id}', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'update'])->name('medicine-types.update');
+    Route::post('/medicine-types/{id}/toggle-status', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'toggleStatus'])->name('medicine-types.toggle-status');
+    Route::delete('/medicine-types/{id}', [\App\Http\Controllers\Admin\MedicineTypeController::class, 'destroy'])->name('medicine-types.destroy');
+
+    // Master Kategori Obat (Farmakologi) Module
+    Route::get('/medicine-categories', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'index'])->name('medicine-categories.index');
+    Route::post('/medicine-categories', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'store'])->name('medicine-categories.store');
+    Route::post('/medicine-categories/quick', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'quickStore'])->name('medicine-categories.quick-store');
+    Route::put('/medicine-categories/{id}', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'update'])->name('medicine-categories.update');
+    Route::post('/medicine-categories/{id}/toggle-status', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'toggleStatus'])->name('medicine-categories.toggle-status');
+    Route::delete('/medicine-categories/{id}', [\App\Http\Controllers\Admin\MedicineCategoryController::class, 'destroy'])->name('medicine-categories.destroy');
+
     // Product Unit & Price Management Module
     Route::get('/obat/{kode}/units-prices', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'getDetails'])->name('obat.units-prices.get');
     Route::post('/obat/{kode}/primary-units', [\App\Http\Controllers\Admin\ProductUnitPriceController::class, 'setPrimaryUnits'])->name('obat.primary-units.store');

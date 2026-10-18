@@ -2,7 +2,8 @@
 import LegacyLayout from '@/Layouts/LegacyLayout.vue';
 import RupiahInput from '@/Components/RupiahInput.vue';
 import PriceUnitModal from './Partials/PriceUnitModal.vue';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import axios from 'axios';
 import { useForm, router, Link } from '@inertiajs/vue3';
 import { showConfirm } from '@/Utils/swal';
 
@@ -10,8 +11,92 @@ const props = defineProps({
     obats: Object,
     suppliers: Array,
     units: Array,
+    medicineTypes: Array,
+    medicineCategories: Array,
     filters: Object,
 });
+
+// Master Jenis & Kategori States
+const localMedicineTypes = ref([...(props.medicineTypes || [])]);
+const localMedicineCategories = ref([...(props.medicineCategories || [])]);
+
+watch(() => props.medicineTypes, (val) => {
+    if (val) localMedicineTypes.value = [...val];
+}, { deep: true });
+
+watch(() => props.medicineCategories, (val) => {
+    if (val) localMedicineCategories.value = [...val];
+}, { deep: true });
+
+// Quick Add State
+const showQuickAddModal = ref(false);
+const quickAddType = ref('jenis'); // 'jenis' or 'kategori'
+const quickAddTargetForm = ref('create'); // 'create' or 'edit'
+const quickAddName = ref('');
+const quickAddDesc = ref('');
+const isQuickAdding = ref(false);
+const quickAddError = ref('');
+
+const openQuickAdd = (type, targetForm = 'create') => {
+    quickAddType.value = type;
+    quickAddTargetForm.value = targetForm;
+    quickAddName.value = '';
+    quickAddDesc.value = '';
+    quickAddError.value = '';
+    showQuickAddModal.value = true;
+};
+
+const closeQuickAdd = () => {
+    showQuickAddModal.value = false;
+};
+
+const submitQuickAdd = async () => {
+    if (!quickAddName.value.trim()) {
+        quickAddError.value = 'Nama wajib diisi!';
+        return;
+    }
+    isQuickAdding.value = true;
+    quickAddError.value = '';
+
+    try {
+        if (quickAddType.value === 'jenis') {
+            const res = await axios.post(route('admin.medicine-types.quick-store'), {
+                name: quickAddName.value.trim(),
+                description: quickAddDesc.value.trim() || null,
+            });
+            if (res.data && res.data.data) {
+                const newItem = res.data.data;
+                const exists = localMedicineTypes.value.some(x => x.name.toLowerCase() === newItem.name.toLowerCase());
+                if (!exists) localMedicineTypes.value.push(newItem);
+                if (quickAddTargetForm.value === 'create') {
+                    createForm.jenis_obat = newItem.name;
+                } else {
+                    editForm.jenis_obat = newItem.name;
+                }
+            }
+        } else {
+            const res = await axios.post(route('admin.medicine-categories.quick-store'), {
+                name: quickAddName.value.trim(),
+                description: quickAddDesc.value.trim() || null,
+            });
+            if (res.data && res.data.data) {
+                const newItem = res.data.data;
+                const exists = localMedicineCategories.value.some(x => x.name.toLowerCase() === newItem.name.toLowerCase());
+                if (!exists) localMedicineCategories.value.push(newItem);
+                if (quickAddTargetForm.value === 'create') {
+                    createForm.kategori = newItem.name;
+                } else {
+                    editForm.kategori = newItem.name;
+                }
+            }
+        }
+        closeQuickAdd();
+    } catch (err) {
+        quickAddError.value = err.response?.data?.message || err.response?.data?.errors?.name?.[0] || 'Gagal menambahkan data.';
+    } finally {
+        isQuickAdding.value = false;
+    }
+};
 
 const search = ref(props.filters?.search || '');
 const showPriceModal = ref(false);
@@ -140,6 +225,18 @@ const submitImport = () => {
 };
 
 // Form Tambah
+const openTambahModal = () => {
+    createForm.reset();
+    createForm.kode = generateKodeObat();
+    createForm.jenis_obat = localMedicineTypes.value?.[0]?.name || 'Tablet';
+    createForm.kategori = localMedicineCategories.value?.[0]?.name || 'Antibiotik';
+    const modalEl = document.getElementById('tambahObatModal');
+    if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+};
+
 const createForm = useForm({
     kode: generateKodeObat(),
     nama: '',
@@ -252,7 +349,7 @@ const formatCurrency = (val) => {
                             <span>Import CSV / Excel</span>
                         </button>
 
-                        <button class="btn btn-primary shadow-sm rounded-3 px-3 py-2 d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#tambahObatModal">
+                        <button class="btn btn-primary shadow-sm rounded-3 px-3 py-2 d-flex align-items-center gap-2" @click="openTambahModal">
                             <i class="bx bx-plus fs-5"></i>
                             <span>Tambah Obat</span>
                         </button>
@@ -423,26 +520,38 @@ const formatCurrency = (val) => {
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold">Jenis Obat</label>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold mb-0">Jenis Obat</label>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-primary fw-semibold" style="font-size: 0.78rem;" @click="openQuickAdd('jenis', 'create')">
+                                            <i class="bx bx-plus-circle me-1"></i>+ Tambah Baru
+                                        </button>
+                                    </div>
                                     <select class="form-select rounded-3" v-model="createForm.jenis_obat" required>
-                                        <option value="Tablet">Tablet</option>
-                                        <option value="Kapsul">Kapsul</option>
-                                        <option value="Sirup">Sirup</option>
-                                        <option value="Salep">Salep</option>
-                                        <option value="Injeksi">Injeksi</option>
+                                        <option value="" disabled>-- Pilih Jenis Obat --</option>
+                                        <option v-for="t in localMedicineTypes" :key="t.id || t.name" :value="t.name">{{ t.name }}</option>
                                     </select>
+                                    <div class="d-flex justify-content-end mt-1">
+                                        <Link :href="route('admin.medicine-types.index')" class="text-secondary small text-decoration-none" style="font-size: 0.72rem;" target="_blank">
+                                            <i class="bx bx-cog me-1"></i>Kelola Master Jenis Obat
+                                        </Link>
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold">Kategori Obat</label>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold mb-0">Kategori Obat</label>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-primary fw-semibold" style="font-size: 0.78rem;" @click="openQuickAdd('kategori', 'create')">
+                                            <i class="bx bx-plus-circle me-1"></i>+ Tambah Baru
+                                        </button>
+                                    </div>
                                     <select class="form-select rounded-3" v-model="createForm.kategori" required>
-                                        <option value="Antibiotik">Antibiotik</option>
-                                        <option value="Antipiretik">Antipiretik</option>
-                                        <option value="Analgesik">Analgesik</option>
-                                        <option value="Antihistamin">Antihistamin</option>
-                                        <option value="Vitamin">Vitamin</option>
-                                        <option value="Antiseptik">Antiseptik</option>
-                                        <option value="Herbal">Herbal</option>
+                                        <option value="" disabled>-- Pilih Kategori Obat --</option>
+                                        <option v-for="c in localMedicineCategories" :key="c.id || c.name" :value="c.name">{{ c.name }}</option>
                                     </select>
+                                    <div class="d-flex justify-content-end mt-1">
+                                        <Link :href="route('admin.medicine-categories.index')" class="text-secondary small text-decoration-none" style="font-size: 0.72rem;" target="_blank">
+                                            <i class="bx bx-cog me-1"></i>Kelola Master Kategori Obat
+                                        </Link>
+                                    </div>
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -520,26 +629,44 @@ const formatCurrency = (val) => {
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold">Jenis Obat</label>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold mb-0">Jenis Obat</label>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-primary fw-semibold" style="font-size: 0.78rem;" @click="openQuickAdd('jenis', 'edit')">
+                                            <i class="bx bx-plus-circle me-1"></i>+ Tambah Baru
+                                        </button>
+                                    </div>
                                     <select class="form-select rounded-3" v-model="editForm.jenis_obat" required>
-                                        <option value="Tablet">Tablet</option>
-                                        <option value="Kapsul">Kapsul</option>
-                                        <option value="Sirup">Sirup</option>
-                                        <option value="Salep">Salep</option>
-                                        <option value="Injeksi">Injeksi</option>
+                                        <option value="" disabled>-- Pilih Jenis Obat --</option>
+                                        <option v-if="editForm.jenis_obat && !localMedicineTypes.some(x => x.name === editForm.jenis_obat)" :value="editForm.jenis_obat">
+                                            {{ editForm.jenis_obat }} (Custom)
+                                        </option>
+                                        <option v-for="t in localMedicineTypes" :key="t.id || t.name" :value="t.name">{{ t.name }}</option>
                                     </select>
+                                    <div class="d-flex justify-content-end mt-1">
+                                        <Link :href="route('admin.medicine-types.index')" class="text-secondary small text-decoration-none" style="font-size: 0.72rem;" target="_blank">
+                                            <i class="bx bx-cog me-1"></i>Kelola Master Jenis Obat
+                                        </Link>
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold">Kategori Obat</label>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold mb-0">Kategori Obat</label>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-primary fw-semibold" style="font-size: 0.78rem;" @click="openQuickAdd('kategori', 'edit')">
+                                            <i class="bx bx-plus-circle me-1"></i>+ Tambah Baru
+                                        </button>
+                                    </div>
                                     <select class="form-select rounded-3" v-model="editForm.kategori" required>
-                                        <option value="Antibiotik">Antibiotik</option>
-                                        <option value="Antipiretik">Antipiretik</option>
-                                        <option value="Analgesik">Analgesik</option>
-                                        <option value="Antihistamin">Antihistamin</option>
-                                        <option value="Vitamin">Vitamin</option>
-                                        <option value="Antiseptik">Antiseptik</option>
-                                        <option value="Herbal">Herbal</option>
+                                        <option value="" disabled>-- Pilih Kategori Obat --</option>
+                                        <option v-if="editForm.kategori && !localMedicineCategories.some(x => x.name === editForm.kategori)" :value="editForm.kategori">
+                                            {{ editForm.kategori }} (Custom)
+                                        </option>
+                                        <option v-for="c in localMedicineCategories" :key="c.id || c.name" :value="c.name">{{ c.name }}</option>
                                     </select>
+                                    <div class="d-flex justify-content-end mt-1">
+                                        <Link :href="route('admin.medicine-categories.index')" class="text-secondary small text-decoration-none" style="font-size: 0.72rem;" target="_blank">
+                                            <i class="bx bx-cog me-1"></i>Kelola Master Kategori Obat
+                                        </Link>
+                                    </div>
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -714,6 +841,60 @@ const formatCurrency = (val) => {
                             <button type="button" class="btn btn-light px-4 rounded-3" @click="closeImportModal">Batal</button>
                             <button type="submit" class="btn btn-success text-white px-4 fw-bold rounded-3" :disabled="importForm.processing || !importForm.file">
                                 <i class="bx bx-upload me-1"></i> Mulai Proses Import
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Quick Add Jenis / Kategori -->
+        <div class="modal fade show d-block" tabindex="-1" v-if="showQuickAddModal" style="background: rgba(0,0,0,0.5); z-index: 1065;">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+                <div class="modal-content rounded-4 border-0 shadow">
+                    <div class="modal-header border-0 pb-0">
+                        <h6 class="modal-title fw-bold">
+                            <i class="bx me-2" :class="quickAddType === 'jenis' ? 'bx-shape-polygon text-primary' : 'bx-category-alt text-success'"></i>
+                            Tambah {{ quickAddType === 'jenis' ? 'Jenis Obat' : 'Kategori Obat' }} Baru
+                        </h6>
+                        <button type="button" class="btn-close" @click="closeQuickAdd"></button>
+                    </div>
+                    <form @submit.prevent="submitQuickAdd">
+                        <div class="modal-body py-3">
+                            <div class="alert alert-danger py-2 px-3 small rounded-3 mb-3" v-if="quickAddError">
+                                {{ quickAddError }}
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold text-muted">
+                                    {{ quickAddType === 'jenis' ? 'Nama Bentuk Sediaan' : 'Nama Golongan Farmakologi' }} <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    class="form-control rounded-3" 
+                                    :placeholder="quickAddType === 'jenis' ? 'Contoh: Kaplet, Puyer, Tetes...' : 'Contoh: Antiinflamasi, Antasida...'" 
+                                    v-model="quickAddName"
+                                    required
+                                    autofocus
+                                >
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold text-muted">Deskripsi / Keterangan (Opsional)</label>
+                                <textarea 
+                                    class="form-control rounded-3" 
+                                    rows="2" 
+                                    placeholder="Keterangan singkat..." 
+                                    v-model="quickAddDesc"
+                                ></textarea>
+                            </div>
+                            <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                Data ini otomatis masuk ke Master Data dan dapat dipilih seterusnya.
+                            </small>
+                        </div>
+                        <div class="modal-footer border-0 pt-0">
+                            <button type="button" class="btn btn-light btn-sm rounded-3 px-3" @click="closeQuickAdd">Batal</button>
+                            <button type="submit" class="btn btn-primary btn-sm rounded-3 px-4" :disabled="isQuickAdding">
+                                <span v-if="isQuickAdding" class="spinner-border spinner-border-sm me-1"></span>
+                                Simpan & Pilih
                             </button>
                         </div>
                     </form>
