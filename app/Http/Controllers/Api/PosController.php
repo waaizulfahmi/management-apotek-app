@@ -62,6 +62,7 @@ class PosController extends Controller
         }
 
         $masterShifts = \App\Models\MasterShift::where('is_active', true)->orderBy('start_time', 'asc')->get();
+        $activeOutletId = \App\Services\OutletService::getActiveOutletId();
 
         return Inertia::render('Pos/Index', [
             'medicines' => $paginatedMedicines['data'],
@@ -70,6 +71,7 @@ class PosController extends Controller
             'customers' => $customers,
             'prescriptions' => $prescriptions,
             'masterShifts' => $masterShifts,
+            'activeOutletId' => $activeOutletId,
         ]);
     }
 
@@ -113,7 +115,7 @@ class PosController extends Controller
                 'obats.jenis_obat',
                 'obats.kategori',
                 DB::raw('COALESCE(product_outlets.price, obats.harga) as harga'),
-                DB::raw('COALESCE(product_stocks.stock, 0) as stok'),
+                DB::raw('COALESCE(product_stocks.stock, obats.stok, 0) as stok'),
                 'obats.satuan_dasar_id',
                 'obats.satuan_pembelian_id',
                 'obats.satuan_penjualan_id'
@@ -228,6 +230,12 @@ class PosController extends Controller
                 throw new Exception("Shift belum dibuka. Silakan buka shift terlebih dahulu.");
             }
 
+            // Ensure outlet_id is accurately resolved and synced
+            $outletId = $activeShift->outlet_id ?: (auth()->user()->outlet_id ?: \App\Services\OutletService::getActiveOutletId(auth()->user()));
+            if (!$activeShift->outlet_id && $outletId) {
+                $activeShift->update(['outlet_id' => $outletId]);
+            }
+
             $subtotal = 0;
             $itemsToInsert = [];
 
@@ -253,7 +261,7 @@ class PosController extends Controller
                 // Total base stock to deduct from FEFO batches
                 $baseQtyNeeded = (int)ceil($txQty * $conversionFactor);
 
-                // FEFO Stock Deduction
+                // FEFO Stock Deduction (including outlet stock)
                 $allocatedBatches = FefoService::deductStock(
                     $medKode,
                     $baseQtyNeeded,
@@ -262,7 +270,8 @@ class PosController extends Controller
                     $unitId,
                     $unitName,
                     $txQty,
-                    $conversionFactor
+                    $conversionFactor,
+                    $outletId
                 );
 
                 // Line subtotal based on POS transaction unit price
@@ -303,10 +312,10 @@ class PosController extends Controller
                 'invoice_number' => $invoiceNumber,
                 'cashier_id' => $cashierId,
                 'shift_id' => $activeShift->id,
-                'outlet_id' => $activeShift->outlet_id,
+                'outlet_id' => $outletId,
                 'customer_id' => $request->customer_id,
                 'prescription_id' => $request->prescription_id ?: null,
-                'sale_date' => now()->toDateString(),
+                'sale_date' => now(),
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'tax' => $tax,

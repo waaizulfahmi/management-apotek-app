@@ -26,22 +26,50 @@ class SalesHistoryController extends Controller
         $query = Sale::with(['customer', 'user', 'items.medicine', 'outlet'])
             ->orderBy('id', 'desc');
 
+        // Self-heal: sync any existing sales where outlet_id is null to the cashier's assigned outlet
+        try {
+            DB::table('sales')
+                ->join('users', 'sales.cashier_id', '=', 'users.id')
+                ->whereNull('sales.outlet_id')
+                ->whereNotNull('users.outlet_id')
+                ->update(['sales.outlet_id' => DB::raw('users.outlet_id')]);
+        } catch (\Throwable $e) {
+            // Ignore if in read-only mode
+        }
+
+        // Cashier role restriction flag
+        $isCashier = $user->role === 'kasir' && !$user->can('sales.view_all_cashier');
+
         // Scoping by active/selected outlet
         if ($selectedOutletId) {
             $mainOutlet = Outlet::where('is_main', true)->first();
             $isMainOutlet = $mainOutlet && $mainOutlet->id == $selectedOutletId;
 
-            $query->where(function ($q) use ($selectedOutletId, $isMainOutlet) {
-                $q->where('outlet_id', $selectedOutletId);
-                if ($isMainOutlet) {
-                    $q->orWhereNull('outlet_id');
-                }
+            $query->where(function ($q) use ($selectedOutletId, $isMainOutlet, $isCashier, $user) {
+                $q->where('sales.outlet_id', $selectedOutletId)
+                  ->orWhere(function ($sub) use ($selectedOutletId, $isMainOutlet, $isCashier, $user) {
+                      $sub->whereNull('sales.outlet_id');
+                      if ($isCashier && $user->outlet_id == $selectedOutletId) {
+                          $sub->where('sales.cashier_id', $user->id);
+                      } else {
+                          $sub->whereExists(function ($uq) use ($selectedOutletId) {
+                              $uq->select(DB::raw(1))
+                                 ->from('users')
+                                 ->whereColumn('users.id', 'sales.cashier_id')
+                                 ->where('users.outlet_id', $selectedOutletId);
+                          });
+                          if ($isMainOutlet) {
+                              $sub->orWhereNotExists(function ($uq) {
+                                  $uq->select(DB::raw(1))
+                                     ->from('users')
+                                     ->whereColumn('users.id', 'sales.cashier_id')
+                                     ->whereNotNull('users.outlet_id');
+                              });
+                          }
+                      }
+                  });
             });
         }
-
-        // Cashier role restriction: If user is kasir and lacks sales.view_all_cashier,
-        // show ONLY the sales performed by this specific cashier.
-        $isCashier = $user->role === 'kasir' && !$user->can('sales.view_all_cashier');
         if ($isCashier) {
             $query->where('cashier_id', $user->id);
         } elseif ($request->filled('cashier_id')) {

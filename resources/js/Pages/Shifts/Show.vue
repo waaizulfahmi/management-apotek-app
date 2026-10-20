@@ -336,7 +336,7 @@ const isCurrentShiftOvertimeOrMismatch = computed(() => {
                             <tbody>
                                 <tr v-for="s in shift.sales" :key="s.id">
                                     <td class="fw-bold text-primary">{{ s.invoice_number }}</td>
-                                    <td>{{ formatDate(s.sale_date) }}</td>
+                                    <td>{{ formatDate(s.created_at || s.sale_date) }}</td>
                                     <td>{{ s.customer?.name || 'Umum' }}</td>
                                     <td><span class="badge bg-info text-dark text-uppercase">{{ s.payment_method }}</span></td>
                                     <td class="text-end fw-bold text-dark">{{ formatCurrency(s.grand_total) }}</td>

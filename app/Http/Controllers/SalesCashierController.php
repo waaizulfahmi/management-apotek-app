@@ -49,7 +49,14 @@ class SalesCashierController extends Controller
             $query->where('cashier_shifts.shift_name', $request->shift_name);
         }
         if ($request->filled('outlet_id')) {
-            $query->where('sales.outlet_id', $request->outlet_id);
+            $reqOutletId = $request->outlet_id;
+            $query->where(function ($q) use ($reqOutletId) {
+                $q->where('sales.outlet_id', $reqOutletId)
+                  ->orWhere(function ($sub) use ($reqOutletId) {
+                      $sub->whereNull('sales.outlet_id')
+                          ->where('users.outlet_id', $reqOutletId);
+                  });
+            });
         }
         if ($request->filled('payment_method')) {
             $query->where('sales.payment_method', $request->payment_method);

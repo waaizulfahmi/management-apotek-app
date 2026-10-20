@@ -236,7 +236,7 @@ const progressPercent = props.nextTier && nextMin > 0 ? Math.min(100, Math.round
                                     <tbody>
                                         <tr v-for="s in customer.sales" :key="s.id">
                                             <td class="fw-bold text-primary font-monospace">{{ s.invoice_number }}</td>
-                                            <td>{{ formatDate(s.sale_date) }}</td>
+                                            <td>{{ formatDate(s.created_at || s.sale_date) }}</td>
                                             <td><span class="badge bg-info text-dark text-uppercase">{{ s.payment_method }}</span></td>
                                             <td class="fw-bold text-dark fs-6">{{ formatRupiah(s.grand_total) }}</td>
                                             <td><span class="badge bg-success">{{ s.status }}</span></td>

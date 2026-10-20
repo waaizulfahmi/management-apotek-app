@@ -26,7 +26,8 @@ class FefoService
         ?int $unitId = null,
         ?string $unitName = null,
         ?int $transactionQty = null,
-        float $conversionFactor = 1.0000
+        float $conversionFactor = 1.0000,
+        ?int $outletId = null
     ): array
     {
         $medicine = Obat::findOrFail($medicineKode);
@@ -99,6 +100,7 @@ class FefoService
                 'stock_after' => $newStock,
                 'reference_number' => $referenceNumber,
                 'user_id' => $userId,
+                'outlet_id' => $outletId,
                 'unit_id' => $unitId,
                 'unit_name' => $unitName,
                 'transaction_quantity' => $transactionQty ?? $deductQty,
@@ -121,6 +123,29 @@ class FefoService
 
         // Update total stock on medicines table
         $medicine->decrement('stok', $qtyNeeded);
+
+        // Update product_stocks table (outlet stock)
+        if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+            $pStock = DB::table('product_stocks')
+                ->where('obat_id', $medicineKode)
+                ->where('outlet_id', $outletId)
+                ->first();
+
+            if ($pStock) {
+                DB::table('product_stocks')
+                    ->where('id', $pStock->id)
+                    ->decrement('stock', $qtyNeeded);
+            } else {
+                DB::table('product_stocks')->insert([
+                    'obat_id' => $medicineKode,
+                    'outlet_id' => $outletId,
+                    'stock' => max(0, (float)($medicine->fresh()->stok ?? 0)),
+                    'min_stock' => (float)($medicine->min_stok ?? 5),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
 
         return $allocatedBatches;
     }

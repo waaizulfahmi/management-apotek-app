@@ -13,6 +13,7 @@ const props = defineProps({
     customers: Array,
     prescriptions: Array,
     masterShifts: Array,
+    activeOutletId: [Number, String],
 });
 
 // DOM Element Refs
@@ -134,7 +135,7 @@ const openShiftForm = useForm({
     master_shift_id: initialMasterShift ? initialMasterShift.id : '',
     shift_name: initialMasterShift ? initialMasterShift.name : 'Shift Pagi',
     opening_cash: 500000,
-    outlet_id: '',
+    outlet_id: props.activeOutletId || '',
 });
 
 const selectedMasterShiftInPos = computed(() => {
@@ -428,8 +429,11 @@ const resetTransaction = () => {
 const closeReceiptModal = () => {
     const modalEl = document.getElementById('receiptModal');
     if (modalEl) {
-        const bsModal = bootstrap.Modal.getInstance(modalEl);
-        if (bsModal) bsModal.hide();
+        const bs = window.bootstrap || (typeof bootstrap !== 'undefined' ? bootstrap : null);
+        if (bs && bs.Modal) {
+            const bsModal = bs.Modal.getInstance(modalEl);
+            if (bsModal) bsModal.hide();
+        }
     }
 };
 
@@ -896,13 +900,19 @@ const executeCheckout = async () => {
             // Realtime Stock Reload
             performSearch(currentPage.value, true);
 
+            // Realtime Shift Metrics Reload
+            fetchActiveShift();
+
             setTimeout(() => {
                 const modalEl = document.getElementById('receiptModal');
                 if (modalEl) {
-                    const modal = new bootstrap.Modal(modalEl);
-                    modal.show();
+                    const bs = window.bootstrap || (typeof bootstrap !== 'undefined' ? bootstrap : null);
+                    if (bs && bs.Modal) {
+                        const modal = bs.Modal.getInstance(modalEl) || new bs.Modal(modalEl);
+                        modal.show();
+                    }
                 }
-            }, 1500);
+            }, 600);
         }
     } catch (err) {
         showError('Transaksi Gagal', err.response?.data?.message || 'Terjadi kesalahan sistem.');

@@ -118,7 +118,7 @@ const formatCurrency = (amount) => {
                             </div>
                             <div class="col-md-3">
                                 <span class="text-muted small d-block">Tanggal Transaksi</span>
-                                <strong class="text-dark fs-6">{{ formatDate(isSale ? transaction.sale_date : transaction.purchase_date) }}</strong>
+                                <strong class="text-dark fs-6">{{ formatDate(isSale ? (transaction.created_at || transaction.sale_date) : transaction.purchase_date) }}</strong>
                             </div>
                             <div class="col-md-3">
                                 <span class="text-muted small d-block">{{ isSale ? 'Customer' : 'Supplier' }}</span>

@@ -129,7 +129,7 @@ const totalItemQty = computed(() => {
                         </div>
                         <div class="text-end">
                             <span class="badge bg-success fs-6 text-uppercase">{{ sale.status || 'COMPLETED' }}</span>
-                            <small class="text-muted d-block mt-1">Tanggal: {{ formatDate(sale.sale_date) }}</small>
+                            <small class="text-muted d-block mt-1">Tanggal: {{ formatDate(sale.created_at || sale.sale_date) }}</small>
                         </div>
                     </div>
 
@@ -287,7 +287,7 @@ const totalItemQty = computed(() => {
                                 <div class="mb-3 small">
                                     <div class="d-flex justify-content-between">
                                         <span><strong>No Invoice:</strong> {{ sale.invoice_number }}</span>
-                                        <span><strong>Tgl:</strong> {{ formatDate(sale.sale_date) }}</span>
+                                        <span><strong>Tgl:</strong> {{ formatDate(sale.created_at || sale.sale_date) }}</span>
                                     </div>
                                     <div class="d-flex justify-content-between mt-1">
                                         <span><strong>Kasir:</strong> {{ sale.user?.name || '-' }}</span>

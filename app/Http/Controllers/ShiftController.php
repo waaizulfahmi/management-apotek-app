@@ -89,10 +89,14 @@ class ShiftController extends Controller
             'master_shift_id' => 'nullable|exists:master_shifts,id',
         ]);
 
+        $outletId = $request->filled('outlet_id') 
+            ? (int)$request->outlet_id 
+            : (auth()->user()->outlet_id ?: \App\Services\OutletService::getActiveOutletId(auth()->user()));
+
         try {
             $shift = $this->shiftService->openShift(
                 auth()->id(),
-                $request->outlet_id,
+                $outletId,
                 $request->shift_name,
                 $request->opening_cash,
                 $request->master_shift_id

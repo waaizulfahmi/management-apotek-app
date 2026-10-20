@@ -69,7 +69,7 @@ const formatDate = (dateStr) => {
                                             <div class="fw-bold text-dark">{{ p.customer_name }}</div>
                                             <small class="text-muted">{{ p.customer_code }} | {{ p.customer_phone }}</small>
                                         </td>
-                                        <td>{{ formatDate(p.sale_date) }}</td>
+                                        <td>{{ formatDate(p.created_at || p.sale_date) }}</td>
                                         <td><span class="badge bg-info text-dark text-uppercase">{{ p.payment_method }}</span></td>
                                         <td class="fw-bold text-success fs-6">{{ formatRupiah(p.grand_total) }}</td>
                                         <td class="pe-4 text-end"><span class="badge bg-success">{{ p.status }}</span></td>

@@ -569,7 +569,7 @@ onUnmounted(() => {
                                                         <small class="text-muted">{{ sale.outlet?.name || 'Utama' }}</small>
                                                     </td>
                                                     <td>
-                                                        <div class="text-dark small">{{ formatDate(sale.sale_date) }}</div>
+                                                        <div class="text-dark small">{{ formatDate(sale.created_at || sale.sale_date) }}</div>
                                                     </td>
                                                     <td>
                                                         <div class="fw-medium text-dark">{{ sale.customer?.name || 'Umum / Non-Member' }}</div>
@@ -706,7 +706,7 @@ onUnmounted(() => {
                                         <i class="bx bx-file text-primary me-2"></i>Detail Transaksi: {{ selectedSale?.invoice_number }}
                                     </h5>
                                     <div class="small text-white-50 mt-1">
-                                        Tanggal: {{ formatDate(selectedSale?.sale_date) }} | Status: <span class="badge bg-success text-uppercase">{{ selectedSale?.status || 'COMPLETED' }}</span>
+                                        Tanggal: {{ formatDate(selectedSale?.created_at || selectedSale?.sale_date) }} | Status: <span class="badge bg-success text-uppercase">{{ selectedSale?.status || 'COMPLETED' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -748,7 +748,7 @@ onUnmounted(() => {
                                                 <div class="col-7 text-dark">{{ selectedSale?.outlet?.name || activeCashierRow?.outlet_name || 'Utama' }}</div>
 
                                                 <div class="col-5 text-muted">Waktu:</div>
-                                                <div class="col-7 text-dark">{{ formatDate(selectedSale?.sale_date) }}</div>
+                                                <div class="col-7 text-dark">{{ formatDate(selectedSale?.created_at || selectedSale?.sale_date) }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -971,7 +971,7 @@ onUnmounted(() => {
                                     <div class="mb-3 small">
                                         <div class="d-flex justify-content-between">
                                             <span><strong>No Invoice:</strong> {{ saleToPrint?.invoice_number }}</span>
-                                            <span><strong>Tgl:</strong> {{ formatDate(saleToPrint?.sale_date) }}</span>
+                                            <span><strong>Tgl:</strong> {{ formatDate(saleToPrint?.created_at || saleToPrint?.sale_date) }}</span>
                                         </div>
                                         <div class="d-flex justify-content-between mt-1">
                                             <span><strong>Kasir:</strong> {{ saleToPrint?.user?.name || activeCashierRow?.cashier_name || '-' }}</span>
