@@ -57,7 +57,7 @@ class Sale extends Model
 
     public function shift()
     {
-        return $this->belongsTo(CashierShift::class, 'shift_id')->withTrashed();
+        return $this->belongsTo(CashierShift::class, 'shift_id');
     }
 
     public function outlet()

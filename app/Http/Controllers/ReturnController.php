@@ -54,8 +54,9 @@ class ReturnController extends Controller
 
     public function create(Request $request)
     {
-        if (!auth()->user()->can('retur.create')) {
-            abort(403, 'Unauthorized access.');
+        $user = auth()->user();
+        if (!$user->can('retur.create')) {
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin membuat retur.');
         }
 
         $type = $request->get('type', 'sale');
@@ -65,9 +66,17 @@ class ReturnController extends Controller
 
         if ($referenceId) {
             if ($type === 'sale') {
-                $transaction = Sale::with(['items.medicine', 'customer', 'user'])->find($referenceId);
+                $transaction = Sale::with(['items.medicine', 'customer', 'user'])->findOrFail($referenceId);
+                // IDOR check: Cashier can only return their own sales
+                if ($user->role === 'kasir' && !$user->can('retur.view_all_cashier') && $transaction->cashier_id !== $user->id) {
+                    abort(403, 'Akses ditolak. Anda hanya berhak memproses retur untuk transaksi yang Anda layani sendiri.');
+                }
             } else {
-                $transaction = Purchase::with(['items.medicine', 'supplier'])->find($referenceId);
+                // Purchase return is strictly for admin/owner
+                if ($user->role === 'kasir') {
+                    abort(403, 'Akses ditolak. Kasir tidak memiliki akses retur pembelian.');
+                }
+                $transaction = Purchase::with(['items.medicine', 'supplier'])->findOrFail($referenceId);
             }
         }
 
@@ -79,8 +88,9 @@ class ReturnController extends Controller
 
     public function store(Request $request)
     {
-        if (!auth()->user()->can('retur.create')) {
-            abort(403, 'Unauthorized access.');
+        $user = auth()->user();
+        if (!$user->can('retur.create')) {
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin membuat retur.');
         }
 
         $request->validate([
@@ -98,12 +108,22 @@ class ReturnController extends Controller
             'items.*.condition' => 'nullable|string',
         ]);
 
+        if ($request->type === 'sale') {
+            $sale = Sale::findOrFail($request->reference_id);
+            // IDOR Protection on store
+            if ($user->role === 'kasir' && !$user->can('retur.view_all_cashier') && $sale->cashier_id !== $user->id) {
+                abort(403, 'Akses ditolak. Anda hanya berhak memproses retur untuk transaksi yang Anda layani sendiri.');
+            }
+        } elseif ($request->type === 'purchase' && $user->role === 'kasir') {
+            abort(403, 'Akses ditolak. Kasir tidak memiliki akses retur pembelian.');
+        }
+
         try {
             $productReturn = $this->returnService->createReturn(
                 $request->type,
                 $request->reference_id,
                 $request->all(),
-                auth()->id()
+                $user->id
             );
 
             return redirect()->route('returns.show', $productReturn->id)->with('success', 'Retur berhasil dibuat (Status: PENDING).');
@@ -114,8 +134,9 @@ class ReturnController extends Controller
 
     public function show($id)
     {
-        if (!auth()->user()->can('retur.view')) {
-            abort(403, 'Unauthorized access.');
+        $user = auth()->user();
+        if (!$user->can('retur.view')) {
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin melihat retur.');
         }
 
         $productReturn = ProductReturn::with([
@@ -123,20 +144,26 @@ class ReturnController extends Controller
             'sale', 'purchase'
         ])->findOrFail($id);
 
+        // IDOR Protection: Cashier can only view their own return records
+        if ($user->role === 'kasir' && !$user->can('retur.view_all_cashier') && $productReturn->user_id !== $user->id) {
+            abort(403, 'Akses ditolak. Anda tidak berhak melihat detail retur pengguna lain.');
+        }
+
         return Inertia::render('Return/Show', [
             'productReturn' => $productReturn,
-            'canApprove' => auth()->user()->can('retur.approve')
+            'canApprove' => $user->can('retur.approve')
         ]);
     }
 
     public function approve($id)
     {
-        if (!auth()->user()->can('retur.approve')) {
-            abort(403, 'Unauthorized access.');
+        $user = auth()->user();
+        if (!$user->can('retur.approve') || $user->role === 'kasir') {
+            abort(403, 'Akses ditolak. Hanya Administrator atau Owner yang dapat menyetujui retur.');
         }
 
         try {
-            $this->returnService->approveReturn($id, auth()->id());
+            $this->returnService->approveReturn($id, $user->id);
             return back()->with('success', 'Retur berhasil disetujui.');
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -145,11 +172,17 @@ class ReturnController extends Controller
 
     public function cancel($id)
     {
-        if (!auth()->user()->can('retur.cancel')) {
-            abort(403, 'Unauthorized access.');
+        $user = auth()->user();
+        if (!$user->can('retur.cancel')) {
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin membatalkan retur.');
         }
 
         $productReturn = ProductReturn::findOrFail($id);
+
+        // IDOR Protection: Cashier can only cancel their own pending return
+        if ($user->role === 'kasir' && !$user->can('retur.view_all_cashier') && $productReturn->user_id !== $user->id) {
+            abort(403, 'Akses ditolak. Anda tidak berhak membatalkan retur pengguna lain.');
+        }
         
         if ($productReturn->status !== 'PENDING') {
             return back()->with('error', 'Hanya retur berstatus PENDING yang bisa dibatalkan.');

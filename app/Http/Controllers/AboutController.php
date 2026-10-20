@@ -12,10 +12,26 @@ class AboutController extends Controller
     {
         $changelogs = [
             [
-                'version' => 'v2.4.0',
-                'date' => '20 Agustus 2026',
+                'version' => 'v2.5.0',
+                'date' => '20 Oktober 2026',
                 'badge' => 'Terbaru',
                 'badge_color' => 'bg-success',
+                'summary' => 'Penguatan Keamanan IDOR, Isolasi Akses RBAC, Scoping Kasir & Modern Fullscreen Error Suite',
+                'highlights' => [
+                    'Pencegahan Kerentanan IDOR (Insecure Direct Object Reference) pada Penutupan Shift Kasir (/shifts/{id}/close) dan Penyesuaian Kas Masuk/Keluar.',
+                    'Pencegahan IDOR pada Modul Retur: Kasir hanya dapat melihat, membuat, atau membatalkan retur dari transaksi yang dilayaninya sendiri.',
+                    'Penguncian Ketat Hak Akses RBAC: Akses mutasi stok (/inventory/movements, reconcile, adjustment), stok opname, dan pengaturan sistem kini dikunci 100% khusus Administrator.',
+                    'Restrukturisasi Otorisasi: Modul Pengadaan (PO), Finansial (Laba Rugi, Jurnal, Hutang/Piutang), dan Laporan Manajemen dilindungi khusus Administrator & Owner.',
+                    'Scoping Riwayat Transaksi Penjualan: Akun kasir kini hanya menampilkan riwayat transaksi yang dilayaninya sendiri, dilengkapi dropdown filter kasir untuk Administrator & Owner.',
+                    'Detail Transaksi Laporan Kasir & Cetak Struk: Paginasi server-side dan modal interaktif detail nota dengan micro-animasi pop-in cubic-bezier & cetak nota (A4, 80mm, 58mm).',
+                    'Modern Fullscreen Error Suite: Desain ulang halaman error 404, 403, dan 500 dark glassmorphic berlayar penuh dengan proteksi anti-iframe (frame breaker) dan penanganan native Inertia SPA.',
+                ]
+            ],
+            [
+                'version' => 'v2.4.0',
+                'date' => '20 Agustus 2026',
+                'badge' => 'Stabil',
+                'badge_color' => 'bg-secondary',
                 'summary' => 'Pembaruan Fitur Stok Opname Multi-Outlet & Navigasi Keyboard Cepat',
                 'highlights' => [
                     'Sistem Stok Opname berbasis Outlet dengan enkapsulasi data stok & produk per-outlet.',
@@ -82,8 +98,8 @@ class AboutController extends Controller
         $developerInfo = [
             'app_name' => config('app.name', 'Management Apotek'),
             'app_title' => 'Apotek Medika System',
-            'version' => 'v2.4.0',
-            'release_date' => '20 Agustus 2026',
+            'version' => 'v2.5.0',
+            'release_date' => '20 Oktober 2026',
             'developer' => 'Waaizulfahmi & Development Team',
             'role' => 'Full-Stack Software Engineer & AI System Architect',
             'organization' => 'Management Apotek Enterprise Solution',

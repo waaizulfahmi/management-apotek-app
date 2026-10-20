@@ -106,6 +106,14 @@ class ShiftController extends Controller
 
     public function close(Request $request, $id)
     {
+        $user = auth()->user();
+        $shift = CashierShift::findOrFail($id);
+
+        // IDOR Protection: Cashier can only close their own shift
+        if ($user->role === 'kasir' && !$user->can('shift.view_all_cashier') && $shift->cashier_id !== $user->id) {
+            abort(403, 'Akses ditolak. Anda tidak berhak menutup shift kasir lain.');
+        }
+
         $request->validate([
             'actual_cash' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
@@ -116,7 +124,7 @@ class ShiftController extends Controller
                 $id,
                 $request->actual_cash,
                 $request->notes,
-                auth()->id()
+                $user->id
             );
 
             return redirect()->route('shifts.show', $id)->with('success', 'Shift berhasil ditutup!');
@@ -127,6 +135,13 @@ class ShiftController extends Controller
 
     public function forceClose(Request $request, $id)
     {
+        $user = auth()->user();
+
+        // IDOR & Authorization Protection: Only admin or owner can force close
+        if (!in_array($user->role, ['admin', 'owner']) && !$user->can('shift.force_close')) {
+            abort(403, 'Akses ditolak. Hanya Administrator atau Owner yang dapat melakukan Force Close.');
+        }
+
         $request->validate([
             'reason' => 'required|string|min:5',
         ]);
@@ -135,7 +150,7 @@ class ShiftController extends Controller
             $this->shiftService->forceCloseShift(
                 $id,
                 $request->reason,
-                auth()->id()
+                $user->id
             );
 
             return back()->with('success', 'Shift berhasil di-Force Close!');
@@ -146,6 +161,18 @@ class ShiftController extends Controller
 
     public function adjustCash(Request $request, $id)
     {
+        $user = auth()->user();
+        $shift = CashierShift::findOrFail($id);
+
+        // IDOR Protection: Cashier can only adjust cash on their own shift
+        if ($user->role === 'kasir' && !$user->can('shift.view_all_cashier') && $shift->cashier_id !== $user->id) {
+            abort(403, 'Akses ditolak. Anda tidak berhak melakukan penyesuaian kas pada shift kasir lain.');
+        }
+
+        if ($shift->status !== 'OPEN') {
+            return back()->with('error', 'Penyesuaian kas hanya bisa dilakukan pada shift yang masih berstatus OPEN.');
+        }
+
         $request->validate([
             'type' => 'required|in:in,out',
             'amount' => 'required|numeric|min:1',
@@ -158,7 +185,7 @@ class ShiftController extends Controller
                 $request->type,
                 $request->amount,
                 $request->reason,
-                auth()->id()
+                $user->id
             );
 
             return back()->with('success', 'Penyesuaian kas berhasil dicatat!');

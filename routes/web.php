@@ -123,42 +123,73 @@ use App\Http\Controllers\Api\FinancialManagementController;
 
 use App\Http\Controllers\Api\PurchaseOrderController;
 
+// -------------------------------------------------------------
+// 1. Shared Authenticated Routes (Kasir, Admin, Owner)
+// -------------------------------------------------------------
 Route::middleware(['auth'])->group(function () {
+    // POS Cashier Routes
     Route::get('/pos', [\App\Http\Controllers\Api\PosController::class, 'index'])->name('pos.index');
     Route::get('/pos/search-medicines', [\App\Http\Controllers\Api\PosController::class, 'searchMedicines'])->name('pos.search');
     Route::post('/pos/checkout', [\App\Http\Controllers\Api\PosController::class, 'checkout'])->name('pos.checkout');
 
-    // Sales History & Cashier Reports Routes
+    // Sales History & Cashier Reports Routes (Scoped by Role)
     Route::get('/sales/history', [\App\Http\Controllers\SalesHistoryController::class, 'index'])->name('sales.history.index');
     Route::get('/sales/history/{id}', [\App\Http\Controllers\SalesHistoryController::class, 'show'])->name('sales.history.show');
     Route::get('/sales/cashier', [\App\Http\Controllers\SalesCashierController::class, 'index'])->name('sales.cashier.index');
+    Route::get('/sales/cashier/transactions', [\App\Http\Controllers\SalesCashierController::class, 'transactions'])->name('sales.cashier.transactions');
 
-    // Shift Management Routes
+    // Cashier Shift Operations
     Route::get('/shifts', [\App\Http\Controllers\ShiftController::class, 'index'])->name('shifts.index');
     Route::get('/shifts/active', [\App\Http\Controllers\ShiftController::class, 'activeShift'])->name('shifts.active');
     Route::post('/shifts/open', [\App\Http\Controllers\ShiftController::class, 'open'])->name('shifts.open');
     Route::get('/shifts/{id}', [\App\Http\Controllers\ShiftController::class, 'show'])->name('shifts.show');
     Route::post('/shifts/{id}/close', [\App\Http\Controllers\ShiftController::class, 'close'])->name('shifts.close');
-    Route::post('/shifts/{id}/force-close', [\App\Http\Controllers\ShiftController::class, 'forceClose'])->name('shifts.force_close');
     Route::post('/shifts/{id}/adjust-cash', [\App\Http\Controllers\ShiftController::class, 'adjustCash'])->name('shifts.adjust_cash');
 
-    // Master Shift Management Routes
-    Route::get('/master-shifts', [\App\Http\Controllers\MasterShiftController::class, 'index'])->name('master-shifts.index');
-    Route::post('/master-shifts', [\App\Http\Controllers\MasterShiftController::class, 'store'])->name('master-shifts.store');
-    Route::put('/master-shifts/{id}', [\App\Http\Controllers\MasterShiftController::class, 'update'])->name('master-shifts.update');
-    Route::post('/master-shifts/{id}/toggle', [\App\Http\Controllers\MasterShiftController::class, 'toggleActive'])->name('master-shifts.toggle');
-    Route::delete('/master-shifts/{id}', [\App\Http\Controllers\MasterShiftController::class, 'destroy'])->name('master-shifts.destroy');
-
-    Route::get('/suppliers', [SupplierController::class, 'index'])->name('suppliers.index');
-    Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
-
+    // Customer Lookup
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
 
+    // Prescriptions (Viewing & Dispensing)
+    Route::get('/prescriptions', [PrescriptionController::class, 'index'])->name('prescriptions.index');
+    Route::get('/prescriptions/{id}', [PrescriptionController::class, 'show'])->name('prescriptions.show');
+    Route::post('/prescriptions', [PrescriptionController::class, 'store'])->name('prescriptions.store');
+    Route::put('/prescriptions/{id}', [PrescriptionController::class, 'update'])->name('prescriptions.update');
+    Route::post('/prescriptions/{id}/status', [PrescriptionController::class, 'updateStatus'])->name('prescriptions.status');
+
+    // Returns / Retur Barang (Cashier Creation)
+    Route::get('/returns', [\App\Http\Controllers\ReturnController::class, 'index'])->name('returns.index');
+    Route::get('/returns/create', [\App\Http\Controllers\ReturnController::class, 'create'])->name('returns.create');
+    Route::post('/returns', [\App\Http\Controllers\ReturnController::class, 'store'])->name('returns.store');
+    Route::get('/returns/{id}', [\App\Http\Controllers\ReturnController::class, 'show'])->name('returns.show');
+    Route::post('/returns/{id}/log-print', [\App\Http\Controllers\ReturnController::class, 'logPrint'])->name('returns.log-print');
+
+    // Switch Active Outlet
+    Route::post('/outlets/switch', [\App\Http\Controllers\Admin\OutletController::class, 'switchOutlet'])->name('outlets.switch');
+    Route::get('/about', [\App\Http\Controllers\AboutController::class, 'index'])->name('about.index');
+});
+
+// -------------------------------------------------------------
+// 2. Admin & Owner Protected Routes
+// -------------------------------------------------------------
+Route::middleware(['auth', 'role:admin,owner'])->group(function () {
+    // Shift Force Close
+    Route::post('/shifts/{id}/force-close', [\App\Http\Controllers\ShiftController::class, 'forceClose'])->name('shifts.force_close');
+
+    // Prescription Deletion
+    Route::delete('/prescriptions/{id}', [PrescriptionController::class, 'destroy'])->name('prescriptions.destroy');
+
+    // Return Approvals
+    Route::post('/returns/{id}/approve', [\App\Http\Controllers\ReturnController::class, 'approve'])->name('returns.approve');
+    Route::post('/returns/{id}/cancel', [\App\Http\Controllers\ReturnController::class, 'cancel'])->name('returns.cancel');
+
+    // Suppliers & Doctors
+    Route::get('/suppliers', [SupplierController::class, 'index'])->name('suppliers.index');
+    Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
     Route::get('/doctors', [DoctorController::class, 'index'])->name('doctors.index');
     Route::post('/doctors', [DoctorController::class, 'store'])->name('doctors.store');
 
-    // Enhanced Purchase Order (PO) & Goods Receipt Routes
+    // Purchases & Purchase Orders (PO)
     Route::get('/purchases', [PurchaseOrderController::class, 'index'])->name('purchases.index');
     Route::get('/purchases/po', [PurchaseOrderController::class, 'index'])->name('purchases.po.index');
     Route::get('/purchases/po/create', [PurchaseOrderController::class, 'create'])->name('purchases.po.create');
@@ -170,19 +201,68 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/purchases/po/{id}/receive', [PurchaseOrderController::class, 'receiveForm'])->name('purchases.po.receive');
     Route::post('/purchases/po/{id}/receive', [PurchaseOrderController::class, 'receiveStore'])->name('purchases.po.receive.store');
 
-    Route::get('/prescriptions', [PrescriptionController::class, 'index'])->name('prescriptions.index');
-    Route::get('/prescriptions/{id}', [PrescriptionController::class, 'show'])->name('prescriptions.show');
-    Route::post('/prescriptions', [PrescriptionController::class, 'store'])->name('prescriptions.store');
-    Route::put('/prescriptions/{id}', [PrescriptionController::class, 'update'])->name('prescriptions.update');
-    Route::delete('/prescriptions/{id}', [PrescriptionController::class, 'destroy'])->name('prescriptions.destroy');
-    Route::post('/prescriptions/{id}/status', [PrescriptionController::class, 'updateStatus'])->name('prescriptions.status');
-
-    // Inventory Movement & Kartu Stok Routes
+    // Real Stock Overview
     Route::get('/inventory/stocks', [\App\Http\Controllers\Api\StockMovementController::class, 'realStock'])->name('inventory.stocks');
+
+    // Stock per Outlet & Stock Transfer
+    Route::get('/inventory/stocks-per-outlet', [\App\Http\Controllers\Inventory\StockTransferController::class, 'stockPerOutlet'])->name('inventory.stocks-per-outlet');
+    Route::get('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'index'])->name('stock-transfers.index');
+    Route::get('/inventory/stock-transfers/create', [\App\Http\Controllers\Inventory\StockTransferController::class, 'create'])->name('stock-transfers.create');
+    Route::post('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'store'])->name('stock-transfers.store');
+    Route::post('/inventory/stock-transfers/{id}/send', [\App\Http\Controllers\Inventory\StockTransferController::class, 'send'])->name('stock-transfers.send');
+    Route::post('/inventory/stock-transfers/{id}/receive', [\App\Http\Controllers\Inventory\StockTransferController::class, 'receive'])->name('stock-transfers.receive');
+    Route::post('/inventory/stock-transfers/{id}/cancel', [\App\Http\Controllers\Inventory\StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
+
+    // Outlet Product Management
+    Route::get('/inventory/outlet-products', [\App\Http\Controllers\Inventory\OutletProductController::class, 'index'])->name('inventory.outlet-products.index');
+    Route::post('/inventory/outlet-products/attach', [\App\Http\Controllers\Inventory\OutletProductController::class, 'attach'])->name('inventory.outlet-products.attach');
+    Route::put('/inventory/outlet-products/{id}/price', [\App\Http\Controllers\Inventory\OutletProductController::class, 'updatePrice'])->name('inventory.outlet-products.update-price');
+    Route::post('/inventory/outlet-products/{id}/toggle-status', [\App\Http\Controllers\Inventory\OutletProductController::class, 'toggleStatus'])->name('inventory.outlet-products.toggle-status');
+    Route::delete('/inventory/outlet-products/{id}', [\App\Http\Controllers\Inventory\OutletProductController::class, 'detach'])->name('inventory.outlet-products.detach');
+
+    // Financial Management Module
+    Route::get('/finance', [FinancialManagementController::class, 'dashboard'])->name('finance.index');
+    Route::get('/finance/accounts', [FinancialManagementController::class, 'accounts'])->name('finance.accounts');
+    Route::post('/finance/accounts', [FinancialManagementController::class, 'storeAccount'])->name('finance.accounts.store');
+    Route::put('/finance/accounts/{id}', [FinancialManagementController::class, 'updateAccount'])->name('finance.accounts.update');
+    Route::delete('/finance/accounts/{id}', [FinancialManagementController::class, 'destroyAccount'])->name('finance.accounts.destroy');
+    Route::get('/finance/payables', [FinancialManagementController::class, 'payables'])->name('finance.payables');
+    Route::post('/finance/payables/{id}/pay', [FinancialManagementController::class, 'payPayable'])->name('finance.payables.pay');
+    Route::get('/finance/receivables', [FinancialManagementController::class, 'receivables'])->name('finance.receivables');
+    Route::get('/finance/journals', [FinancialManagementController::class, 'journals'])->name('finance.journals');
+    Route::get('/finance/profit-loss', [FinancialManagementController::class, 'profitLoss'])->name('finance.profit_loss');
+    Route::post('/finance/expense', [FinanceController::class, 'storeExpense'])->name('finance.expense.store');
+
+    // Reports Module
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+
+    // Membership Module
+    Route::get('/membership', [\App\Http\Controllers\Membership\MembershipController::class, 'dashboard'])->name('membership.dashboard');
+    Route::get('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'members'])->name('membership.members.index');
+    Route::post('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'storeMember'])->name('membership.members.store');
+    Route::get('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'memberShow'])->name('membership.members.show');
+    Route::put('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'updateMember'])->name('membership.members.update');
+    Route::delete('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'destroyMember'])->name('membership.members.destroy');
+    Route::get('/membership/points', [\App\Http\Controllers\Membership\MembershipController::class, 'points'])->name('membership.points.index');
+    Route::get('/membership/rewards', [\App\Http\Controllers\Membership\MembershipController::class, 'rewards'])->name('membership.rewards.index');
+    Route::post('/membership/rewards/redeem', [\App\Http\Controllers\Membership\MembershipController::class, 'redeemReward'])->name('membership.rewards.redeem');
+    Route::get('/membership/vouchers', [\App\Http\Controllers\Membership\MembershipController::class, 'vouchers'])->name('membership.vouchers.index');
+    Route::get('/membership/promos', [\App\Http\Controllers\Membership\MembershipController::class, 'promos'])->name('membership.promos.index');
+    Route::get('/membership/tiers', [\App\Http\Controllers\Membership\MembershipController::class, 'tiers'])->name('membership.tiers.index');
+    Route::get('/membership/purchases', [\App\Http\Controllers\Membership\MembershipController::class, 'purchases'])->name('membership.purchases.index');
+    Route::get('/membership/settings', [\App\Http\Controllers\Membership\MembershipController::class, 'settings'])->name('membership.settings.index');
+    Route::post('/membership/settings', [\App\Http\Controllers\Membership\MembershipController::class, 'updateSettings'])->name('membership.settings.update');
+});
+
+// -------------------------------------------------------------
+// 3. Admin ONLY Protected Routes
+// -------------------------------------------------------------
+Route::middleware(['auth', 'role:admin'])->group(function () {
+    // Inventory Movement & Kartu Stok (Mutasi Stok - ADMIN ONLY)
     Route::get('/inventory/movements', [\App\Http\Controllers\Api\StockMovementController::class, 'index'])->name('inventory.movements');
     Route::get('/inventory/movements/reconcile', [\App\Http\Controllers\Api\StockMovementController::class, 'reconcile'])->name('inventory.movements.reconcile');
     Route::post('/inventory/movements/adjustment', [\App\Http\Controllers\Api\StockMovementController::class, 'storeAdjustment'])->name('inventory.movements.adjustment');
-    
+
     // Stock Opname Manual Module Routes
     Route::get('/opname', [\App\Http\Controllers\StockOpnameManualController::class, 'index'])->name('opname.index');
     Route::post('/opname/create', [\App\Http\Controllers\StockOpnameManualController::class, 'store'])->name('opname.store');
@@ -205,54 +285,14 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/inventory/opname/{id}/review', [StockOpnameController::class, 'reviewMode'])->name('inventory.opname.review');
     Route::post('/inventory/opname/{id}/approve', [StockOpnameController::class, 'approve'])->name('inventory.opname.approve');
 
-    // Financial Management Module Routes
-    Route::get('/finance', [FinancialManagementController::class, 'dashboard'])->name('finance.index');
-    Route::get('/finance/accounts', [FinancialManagementController::class, 'accounts'])->name('finance.accounts');
-    Route::post('/finance/accounts', [FinancialManagementController::class, 'storeAccount'])->name('finance.accounts.store');
-    Route::put('/finance/accounts/{id}', [FinancialManagementController::class, 'updateAccount'])->name('finance.accounts.update');
-    Route::delete('/finance/accounts/{id}', [FinancialManagementController::class, 'destroyAccount'])->name('finance.accounts.destroy');
+    // Master Shifts Management
+    Route::get('/master-shifts', [\App\Http\Controllers\MasterShiftController::class, 'index'])->name('master-shifts.index');
+    Route::post('/master-shifts', [\App\Http\Controllers\MasterShiftController::class, 'store'])->name('master-shifts.store');
+    Route::put('/master-shifts/{id}', [\App\Http\Controllers\MasterShiftController::class, 'update'])->name('master-shifts.update');
+    Route::post('/master-shifts/{id}/toggle', [\App\Http\Controllers\MasterShiftController::class, 'toggleActive'])->name('master-shifts.toggle');
+    Route::delete('/master-shifts/{id}', [\App\Http\Controllers\MasterShiftController::class, 'destroy'])->name('master-shifts.destroy');
 
-    // Full-Feature Membership & Customer Loyalty Module Routes
-    Route::get('/membership', [\App\Http\Controllers\Membership\MembershipController::class, 'dashboard'])->name('membership.dashboard');
-    Route::get('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'members'])->name('membership.members.index');
-    Route::post('/membership/members', [\App\Http\Controllers\Membership\MembershipController::class, 'storeMember'])->name('membership.members.store');
-    Route::get('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'memberShow'])->name('membership.members.show');
-    Route::put('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'updateMember'])->name('membership.members.update');
-    Route::delete('/membership/members/{id}', [\App\Http\Controllers\Membership\MembershipController::class, 'destroyMember'])->name('membership.members.destroy');
-    Route::get('/membership/points', [\App\Http\Controllers\Membership\MembershipController::class, 'points'])->name('membership.points.index');
-    Route::get('/membership/rewards', [\App\Http\Controllers\Membership\MembershipController::class, 'rewards'])->name('membership.rewards.index');
-    Route::post('/membership/rewards/redeem', [\App\Http\Controllers\Membership\MembershipController::class, 'redeemReward'])->name('membership.rewards.redeem');
-    Route::get('/membership/vouchers', [\App\Http\Controllers\Membership\MembershipController::class, 'vouchers'])->name('membership.vouchers.index');
-    Route::get('/membership/promos', [\App\Http\Controllers\Membership\MembershipController::class, 'promos'])->name('membership.promos.index');
-    Route::get('/membership/tiers', [\App\Http\Controllers\Membership\MembershipController::class, 'tiers'])->name('membership.tiers.index');
-    Route::get('/membership/purchases', [\App\Http\Controllers\Membership\MembershipController::class, 'purchases'])->name('membership.purchases.index');
-    Route::get('/membership/settings', [\App\Http\Controllers\Membership\MembershipController::class, 'settings'])->name('membership.settings.index');
-    Route::post('/membership/settings', [\App\Http\Controllers\Membership\MembershipController::class, 'updateSettings'])->name('membership.settings.update');
-    Route::get('/finance/payables', [FinancialManagementController::class, 'payables'])->name('finance.payables');
-    Route::post('/finance/payables/{id}/pay', [FinancialManagementController::class, 'payPayable'])->name('finance.payables.pay');
-    Route::get('/finance/receivables', [FinancialManagementController::class, 'receivables'])->name('finance.receivables');
-    Route::get('/finance/journals', [FinancialManagementController::class, 'journals'])->name('finance.journals');
-    Route::get('/finance/profit-loss', [FinancialManagementController::class, 'profitLoss'])->name('finance.profit_loss');
-    Route::post('/finance/expense', [FinanceController::class, 'storeExpense'])->name('finance.expense.store');
-
-    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-
-    Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
-    Route::post('/settings', [SettingController::class, 'updateSettings'])->name('settings.update');
-    Route::post('/settings/reset-logo', [SettingController::class, 'resetLogo'])->name('settings.reset-logo');
-    Route::get('/about', [\App\Http\Controllers\AboutController::class, 'index'])->name('about.index');
-
-    // Returns / Retur Barang Routes
-    Route::get('/returns', [\App\Http\Controllers\ReturnController::class, 'index'])->name('returns.index');
-    Route::get('/returns/create', [\App\Http\Controllers\ReturnController::class, 'create'])->name('returns.create');
-    Route::post('/returns', [\App\Http\Controllers\ReturnController::class, 'store'])->name('returns.store');
-    Route::get('/returns/{id}', [\App\Http\Controllers\ReturnController::class, 'show'])->name('returns.show');
-    Route::post('/returns/{id}/approve', [\App\Http\Controllers\ReturnController::class, 'approve'])->name('returns.approve');
-    Route::post('/returns/{id}/cancel', [\App\Http\Controllers\ReturnController::class, 'cancel'])->name('returns.cancel');
-    Route::post('/returns/{id}/log-print', [\App\Http\Controllers\ReturnController::class, 'logPrint'])->name('returns.log-print');
-
-    // Outlet Management & Switch Routes
-    Route::post('/outlets/switch', [\App\Http\Controllers\Admin\OutletController::class, 'switchOutlet'])->name('outlets.switch');
+    // Outlets Management CRUD
     Route::get('/outlets', [\App\Http\Controllers\Admin\OutletController::class, 'index'])->name('outlets.index');
     Route::post('/outlets', [\App\Http\Controllers\Admin\OutletController::class, 'store'])->name('outlets.store');
     Route::put('/outlets/{id}', [\App\Http\Controllers\Admin\OutletController::class, 'update'])->name('outlets.update');
@@ -261,21 +301,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/outlets/{id}/set-main', [\App\Http\Controllers\Admin\OutletController::class, 'setMain'])->name('outlets.set-main');
     Route::post('/outlets/{id}/toggle-status', [\App\Http\Controllers\Admin\OutletController::class, 'toggleStatus'])->name('outlets.toggle-status');
 
-    // Stock per Outlet & Stock Transfer Routes
-    Route::get('/inventory/stocks-per-outlet', [\App\Http\Controllers\Inventory\StockTransferController::class, 'stockPerOutlet'])->name('inventory.stocks-per-outlet');
-    Route::get('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'index'])->name('stock-transfers.index');
-    Route::get('/inventory/stock-transfers/create', [\App\Http\Controllers\Inventory\StockTransferController::class, 'create'])->name('stock-transfers.create');
-    Route::post('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'store'])->name('stock-transfers.store');
-    Route::post('/inventory/stock-transfers/{id}/send', [\App\Http\Controllers\Inventory\StockTransferController::class, 'send'])->name('stock-transfers.send');
-    Route::post('/inventory/stock-transfers/{id}/receive', [\App\Http\Controllers\Inventory\StockTransferController::class, 'receive'])->name('stock-transfers.receive');
-    Route::post('/inventory/stock-transfers/{id}/cancel', [\App\Http\Controllers\Inventory\StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
-
-    // Outlet Product Management Routes
-    Route::get('/inventory/outlet-products', [\App\Http\Controllers\Inventory\OutletProductController::class, 'index'])->name('inventory.outlet-products.index');
-    Route::post('/inventory/outlet-products/attach', [\App\Http\Controllers\Inventory\OutletProductController::class, 'attach'])->name('inventory.outlet-products.attach');
-    Route::put('/inventory/outlet-products/{id}/price', [\App\Http\Controllers\Inventory\OutletProductController::class, 'updatePrice'])->name('inventory.outlet-products.update-price');
-    Route::post('/inventory/outlet-products/{id}/toggle-status', [\App\Http\Controllers\Inventory\OutletProductController::class, 'toggleStatus'])->name('inventory.outlet-products.toggle-status');
-    Route::delete('/inventory/outlet-products/{id}', [\App\Http\Controllers\Inventory\OutletProductController::class, 'detach'])->name('inventory.outlet-products.detach');
+    // Global Settings
+    Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+    Route::post('/settings', [SettingController::class, 'updateSettings'])->name('settings.update');
+    Route::post('/settings/reset-logo', [SettingController::class, 'resetLogo'])->name('settings.reset-logo');
 });
 
 Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->group(function () {

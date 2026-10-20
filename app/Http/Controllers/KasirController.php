@@ -32,24 +32,38 @@ class KasirController extends Controller
             $end = Carbon::now()->endOfMonth();
         }
 
+        $user = auth()->user();
+        $isCashier = $user && $user->role === 'kasir' && !$user->can('sales.view_all_cashier');
+
         $total_kasir = DB::table('users')->where('role', 'kasir')->count();
         $total_obat = DB::table('obats')->count();
-        $total_transaksi = DB::table('sales')->whereBetween('sale_date', [$start->toDateString(), $end->toDateString()])->count();
-        $total_pendapatan = DB::table('sales')->whereBetween('sale_date', [$start->toDateString(), $end->toDateString()])->where('status', 'completed')->sum('grand_total');
 
-        $salesTrend = DB::table('sales')
+        $salesBase = DB::table('sales')->whereBetween('sale_date', [$start->toDateString(), $end->toDateString()]);
+        if ($isCashier) {
+            $salesBase->where('sales.cashier_id', $user->id);
+        }
+
+        $total_transaksi = (clone $salesBase)->count();
+        $total_pendapatan = (clone $salesBase)->where('status', 'completed')->sum('grand_total');
+
+        $salesTrend = (clone $salesBase)
             ->select(DB::raw('sale_date as date'), DB::raw('SUM(grand_total) as total'))
-            ->whereBetween('sale_date', [$start->toDateString(), $end->toDateString()])
             ->where('status', 'completed')
             ->groupBy('sale_date')
             ->orderBy('sale_date', 'asc')
             ->get();
 
-        $topSelling = DB::table('sale_items')
+        $topSellingQuery = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->join('obats', 'sale_items.medicine_id', '=', 'obats.kode')
             ->select('obats.nama', DB::raw('SUM(sale_items.quantity) as total_qty'))
-            ->whereBetween('sales.sale_date', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('sales.sale_date', [$start->toDateString(), $end->toDateString()]);
+
+        if ($isCashier) {
+            $topSellingQuery->where('sales.cashier_id', $user->id);
+        }
+
+        $topSelling = $topSellingQuery
             ->groupBy('obats.nama')
             ->orderBy('total_qty', 'desc')
             ->limit(5)
@@ -60,12 +74,17 @@ class KasirController extends Controller
             ->groupBy('kategori')
             ->get();
 
-        $recentSales = DB::table('sales')
+        $recentSalesQuery = DB::table('sales')
             ->join('users', 'sales.cashier_id', '=', 'users.id')
             ->select('sales.*', 'users.name as cashier_name')
             ->orderBy('sales.id', 'desc')
-            ->limit(5)
-            ->get();
+            ->limit(5);
+
+        if ($isCashier) {
+            $recentSalesQuery->where('sales.cashier_id', $user->id);
+        }
+
+        $recentSales = $recentSalesQuery->get();
 
         return Inertia::render('Kasir/Dashboard', [
             'total_kasir' => $total_kasir,

@@ -19,10 +19,19 @@ class RoleMiddleware
             return redirect('login');
         }
 
-        if (in_array(auth()->user()->role, $roles)) {
+        $userRole = auth()->user()->role;
+
+        if (in_array($userRole, $roles) || ($userRole === 'superadmin' && in_array('admin', $roles))) {
             return $next($request);
         }
 
-        return redirect('/dashboard');
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Fitur ini hanya dapat diakses oleh: ' . implode(', ', $roles)
+            ], 403);
+        }
+
+        abort(403, 'Akses ditolak. Halaman ini hanya dapat diakses oleh: ' . implode(', ', $roles));
     }
 }
