@@ -284,7 +284,7 @@ const getStatusBadge = (status) => {
                                     <label class="form-label fw-bold text-dark">Pasien / Pelanggan</label>
                                     <select class="form-select" v-model="createForm.customer_id">
                                         <option value="">-- Non-Member / Pasien Umum --</option>
-                                        <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }} ({{ c.phone || 'No HP -' }})</option>
+                                        <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.phone || 'No HP -' }} ({{ c.name }})</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -443,7 +443,7 @@ const getStatusBadge = (status) => {
                                     <label class="form-label fw-bold text-dark">Pasien / Pelanggan</label>
                                     <select class="form-select" v-model="editForm.customer_id">
                                         <option value="">-- Non-Member / Pasien Umum --</option>
-                                        <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
+                                        <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.phone || 'No HP -' }} ({{ c.name }})</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">

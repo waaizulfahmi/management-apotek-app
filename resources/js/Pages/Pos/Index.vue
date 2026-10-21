@@ -19,7 +19,12 @@ const props = defineProps({
 // DOM Element Refs
 const searchInputRef = ref(null);
 const categorySelectRef = ref(null);
-const customerSelectRef = ref(null);
+const customerPhoneInputRef = ref(null);
+const customerSelectRef = customerPhoneInputRef;
+const customerDropdownRef = ref(null);
+const customerPhoneQuery = ref('');
+const showCustomerDropdown = ref(false);
+const customerHighlightedIndex = ref(-1);
 const discountInputRef = ref(null);
 const taxInputRef = ref(null);
 const paymentMethodRef = ref(null);
@@ -100,6 +105,125 @@ const filteredMedicines = computed(() => {
 });
 const cart = ref([]);
 const selectedCustomer = ref('');
+
+// Member Phone Search & Selection (Berdasarkan No. Telp di Master Membership)
+const filteredCustomers = computed(() => {
+    if (!props.customers || props.customers.length === 0) return [];
+    const rawQ = customerPhoneQuery.value.trim().toLowerCase();
+    if (!rawQ) return props.customers;
+    const cleanQ = rawQ.replace(/[^0-9]/g, '');
+    return props.customers.filter(c => {
+        const phone = (c.phone || '').toLowerCase();
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        if (cleanQ && cleanPhone.includes(cleanQ)) return true;
+        return phone.includes(rawQ);
+    });
+});
+
+const selectCustomer = (c) => {
+    if (!c) {
+        selectedCustomer.value = '';
+        customerPhoneQuery.value = '';
+    } else {
+        selectedCustomer.value = c.id;
+        customerPhoneQuery.value = c.phone || '';
+    }
+    showCustomerDropdown.value = false;
+    customerHighlightedIndex.value = -1;
+};
+
+const getTierBadgeStyle = (tier) => {
+    const t = (tier || '').toLowerCase();
+    if (t === 'gold') return { background: 'linear-gradient(135deg, #d97706, #f59e0b)', color: '#ffffff' };
+    if (t === 'platinum') return { background: 'linear-gradient(135deg, #7c3aed, #a855f7)', color: '#ffffff' };
+    if (t === 'silver') return { background: 'linear-gradient(135deg, #475569, #64748b)', color: '#ffffff' };
+    return { background: 'linear-gradient(135deg, #1d4ed8, #3b82f6)', color: '#ffffff' };
+};
+
+const clearCustomer = () => {
+    selectedCustomer.value = '';
+    customerPhoneQuery.value = '';
+    showCustomerDropdown.value = false;
+    customerHighlightedIndex.value = -1;
+};
+
+const toggleCustomerDropdown = () => {
+    showCustomerDropdown.value = !showCustomerDropdown.value;
+    if (showCustomerDropdown.value) {
+        customerHighlightedIndex.value = -1;
+        nextTick(() => {
+            customerPhoneInputRef.value?.focus();
+        });
+    }
+};
+
+const onCustomerInputFocus = () => {
+    activeZone.value = 'customer';
+    showCustomerDropdown.value = true;
+    customerHighlightedIndex.value = -1;
+    customerPhoneInputRef.value?.select?.();
+};
+
+const onCustomerQueryChange = () => {
+    showCustomerDropdown.value = true;
+    customerHighlightedIndex.value = 0;
+};
+
+const handleCustomerKeydown = (e) => {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        showCustomerDropdown.value = true;
+        if (filteredCustomers.value.length > 0) {
+            if (customerHighlightedIndex.value < filteredCustomers.value.length - 1) {
+                customerHighlightedIndex.value++;
+            } else {
+                customerHighlightedIndex.value = 0;
+            }
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredCustomers.value.length > 0) {
+            if (customerHighlightedIndex.value > 0) {
+                customerHighlightedIndex.value--;
+            } else {
+                customerHighlightedIndex.value = filteredCustomers.value.length - 1;
+            }
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (showCustomerDropdown.value && filteredCustomers.value.length > 0) {
+            const idx = customerHighlightedIndex.value >= 0 ? customerHighlightedIndex.value : 0;
+            selectCustomer(filteredCustomers.value[idx]);
+        }
+    } else if (e.key === 'Escape') {
+        showCustomerDropdown.value = false;
+    }
+};
+
+const handleClickOutside = (event) => {
+    if (customerDropdownRef.value && !customerDropdownRef.value.contains(event.target)) {
+        showCustomerDropdown.value = false;
+        if (selectedCustomer.value) {
+            const current = props.customers?.find(c => c.id === selectedCustomer.value);
+            customerPhoneQuery.value = current ? (current.phone || '') : '';
+        } else {
+            if (!props.customers?.some(c => c.phone === customerPhoneQuery.value.trim())) {
+                customerPhoneQuery.value = '';
+            }
+        }
+    }
+};
+
+watch(selectedCustomer, (newId) => {
+    if (!newId) {
+        customerPhoneQuery.value = '';
+    } else {
+        const found = props.customers?.find(c => c.id === newId);
+        if (found) {
+            customerPhoneQuery.value = found.phone || '';
+        }
+    }
+});
 const discount = ref(0);
 const taxPercent = ref(0);
 const paymentMethod = ref('cash');
@@ -277,8 +401,20 @@ const clearPrescription = () => {
 // KEYBOARD SHORTCUTS & FOCUS MANAGEMENT HELPER METHODS
 // =========================================================
 
+const focusCustomer = () => {
+    activeZone.value = 'customer';
+    showCustomerDropdown.value = true;
+    nextTick(() => {
+        if (customerPhoneInputRef.value) {
+            customerPhoneInputRef.value.focus();
+            customerPhoneInputRef.value.select?.();
+        }
+    });
+};
+
 const focusSearchInput = () => {
     activeZone.value = 'search';
+    showCustomerDropdown.value = false;
     nextTick(() => {
         if (searchInputRef.value) {
             searchInputRef.value.focus();
@@ -288,6 +424,7 @@ const focusSearchInput = () => {
 };
 
 const focusCart = () => {
+    showCustomerDropdown.value = false;
     if (cart.value.length > 0) {
         activeZone.value = 'cart';
         if (cartIndex.value < 0 || cartIndex.value >= cart.value.length) {
@@ -304,6 +441,7 @@ const focusCart = () => {
 
 const focusPayment = () => {
     activeZone.value = 'payment';
+    showCustomerDropdown.value = false;
     nextTick(() => {
         if (paidInputRef.value) {
             paidInputRef.value.focus();
@@ -573,8 +711,7 @@ const handleGlobalKeydown = (e) => {
 
     if (e.key === 'F3') {
         e.preventDefault();
-        activeZone.value = 'customer';
-        customerSelectRef.value?.focus();
+        focusCustomer();
         return;
     }
 
@@ -700,6 +837,7 @@ onMounted(() => {
 
     // Global Keydown Listener
     window.addEventListener('keydown', handleGlobalKeydown);
+    document.addEventListener('click', handleClickOutside);
 
     // Auto-refresh stock numbers silently in background every 6 seconds
     stockPollInterval = setInterval(() => {
@@ -715,6 +853,7 @@ onMounted(() => {
 onUnmounted(() => {
     if (stockPollInterval) clearInterval(stockPollInterval);
     window.removeEventListener('keydown', handleGlobalKeydown);
+    document.removeEventListener('click', handleClickOutside);
 });
 
 const addToCart = (medicine) => {
@@ -1159,23 +1298,160 @@ const printReceipt = () => {
                                 </div>
                             </div>
 
-                            <!-- Customer Selection -->
+                            <!-- Customer Selection (Pencarian & Pemilihan Berdasarkan No. Telp Member) -->
                             <div class="mb-3">
-                                <label class="form-label small text-muted d-flex justify-content-between align-items-center">
-                                    <span>Pelanggan / Member Apotek</span>
+                                <label class="form-label small text-muted d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="bx bx-phone me-1 text-primary"></i>No. Telp Pelanggan / Member</span>
                                     <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.7rem;">[F3] Member</span>
                                 </label>
-                                <select ref="customerSelectRef" class="form-select form-select-sm mb-2" v-model="selectedCustomer" @focus="activeZone = 'customer'">
-                                    <option value="">-- Umum / Non-Member --</option>
-                                    <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }} ({{ c.membership_level ? c.membership_level.toUpperCase() : 'REGULAR' }} - {{ c.points }} Pts)</option>
-                                </select>
+
+                                <div class="position-relative mb-2" ref="customerDropdownRef">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted border-end-0">
+                                            <i class="bx bx-phone"></i>
+                                        </span>
+                                        <input 
+                                            type="text" 
+                                            ref="customerPhoneInputRef" 
+                                            class="form-control form-control-sm border-start-0 font-monospace" 
+                                            v-model="customerPhoneQuery" 
+                                            placeholder="Cari / Masukkan No. Telp Member... [F3]" 
+                                            @focus="onCustomerInputFocus"
+                                            @input="onCustomerQueryChange"
+                                            @keydown="handleCustomerKeydown"
+                                            autocomplete="off"
+                                        />
+                                        <button 
+                                            v-if="selectedCustomer" 
+                                            type="button" 
+                                            class="btn btn-outline-danger btn-sm px-2" 
+                                            @click="clearCustomer" 
+                                            title="Lepas Member (Jadikan Non-Member)"
+                                        >
+                                            <i class="bx bx-x"></i>
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-outline-secondary btn-sm px-2" 
+                                            @click="toggleCustomerDropdown" 
+                                            title="Tampilkan Daftar No. Telp Member"
+                                        >
+                                            <i class="bx" :class="showCustomerDropdown ? 'bx-chevron-up' : 'bx-chevron-down'"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Dropdown List of Member Phone Numbers (Berdasarkan No. Telp) -->
+                                    <div 
+                                        v-if="showCustomerDropdown" 
+                                        class="position-absolute start-0 end-0 shadow-lg mt-1 rounded-3 pos-member-dropdown-card"
+                                        style="max-height: 290px; overflow-y: auto; z-index: 1050;"
+                                    >
+                                        <!-- Header info -->
+                                        <div class="d-flex justify-content-between align-items-center px-3 py-1.5 border-bottom border-secondary border-opacity-25" style="background: rgba(15, 23, 42, 0.75);">
+                                            <span class="text-secondary small fw-semibold" style="font-size: 0.73rem;">
+                                                <i class="bx bx-group me-1 text-info"></i>Daftar Member ({{ filteredCustomers.length }})
+                                            </span>
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 font-monospace" style="font-size: 0.65rem;">
+                                                Pencarian: No. HP
+                                            </span>
+                                        </div>
+
+                                        <!-- Option: Non-Member -->
+                                        <div 
+                                            class="member-select-item p-2 px-3 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25"
+                                            :class="{ 'member-item-active': !selectedCustomer }"
+                                            @click="selectCustomer(null)"
+                                        >
+                                            <div class="d-flex align-items-center gap-2.5">
+                                                <div class="rounded-circle bg-secondary bg-opacity-25 text-secondary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                                    <i class="bx bx-user-x fs-5"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold text-white small">-- Umum / Non-Member --</div>
+                                                    <small class="text-secondary" style="font-size: 0.7rem;">Transaksi reguler tanpa poin & benefit membership</small>
+                                                </div>
+                                            </div>
+                                            <i v-if="!selectedCustomer" class="bx bx-check-circle text-info fs-5"></i>
+                                        </div>
+                                        
+                                        <!-- Member List Items -->
+                                        <div 
+                                            v-for="(c, idx) in filteredCustomers" 
+                                            :key="c.id" 
+                                            class="member-select-item p-2.5 px-3 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25"
+                                            :class="{ 
+                                                'member-item-active': selectedCustomer === c.id || customerHighlightedIndex === idx 
+                                            }"
+                                            @click="selectCustomer(c)"
+                                        >
+                                            <!-- Left: Avatar + Phone Number (Row 1) + Name (Row 2) -->
+                                            <div class="d-flex align-items-center gap-2.5 text-truncate me-2">
+                                                <div 
+                                                    class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 shadow-xs"
+                                                    :style="getTierBadgeStyle(c.membership_level)"
+                                                    style="width: 34px; height: 34px;"
+                                                >
+                                                    <i class="bx bx-user fs-5 text-white"></i>
+                                                </div>
+                                                <div class="d-flex flex-column text-truncate">
+                                                    <!-- Line 1: Phone number (Large, bright cyan font-monospace) -->
+                                                    <div class="d-flex align-items-center gap-1.5">
+                                                        <i class="bx bx-phone" :class="(selectedCustomer === c.id || customerHighlightedIndex === idx) ? 'text-info' : 'text-primary'" style="font-size: 0.85rem;"></i>
+                                                        <strong class="font-monospace fs-6" style="color: #38bdf8; letter-spacing: 0.5px;">
+                                                            {{ c.phone || 'Tanpa No. HP' }}
+                                                        </strong>
+                                                    </div>
+                                                    <!-- Line 2: Member Name (High-Contrast Crisp White Text) -->
+                                                    <div class="d-flex align-items-center gap-1 text-truncate">
+                                                        <span class="fw-bold text-white fs-6 text-truncate">
+                                                            {{ c.name }}
+                                                        </span>
+                                                        <span class="text-secondary small font-monospace flex-shrink-0" style="font-size: 0.72rem;">
+                                                            ({{ c.code }})
+                                                        </span>
+                                                        <span v-if="c.allergies" class="badge bg-danger text-white flex-shrink-0 px-1 py-0 shadow-xs ms-1" style="font-size: 0.65rem;" title="Sensitif Alergi Obat">
+                                                            <i class="bx bx-shield-x"></i> Alergi
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Right: Tier Badge + Points -->
+                                            <div class="d-flex align-items-center gap-1.5 flex-shrink-0 ms-2">
+                                                <span 
+                                                    class="badge text-uppercase fw-bold px-2 py-1 shadow-xs"
+                                                    :style="getTierBadgeStyle(c.membership_level)"
+                                                    style="font-size: 0.68rem; letter-spacing: 0.5px;"
+                                                >
+                                                    {{ c.membership_level ? c.membership_level.toUpperCase() : 'REGULAR' }}
+                                                </span>
+                                                <span 
+                                                    class="badge font-monospace px-2 py-1 bg-success bg-opacity-20 text-success border border-success border-opacity-30 fw-bold"
+                                                    style="font-size: 0.7rem;"
+                                                >
+                                                    <i class="bx bx-coin-stack me-1"></i>{{ c.points }} Pts
+                                                </span>
+                                                <i v-if="selectedCustomer === c.id" class="bx bx-check-circle text-info fs-5 ms-1"></i>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="filteredCustomers.length === 0" class="p-3 text-center text-muted small">
+                                            <i class="bx bx-search-alt fs-3 mb-1 d-block text-secondary"></i>
+                                            <div class="fw-bold text-white mb-0.5">Member Tidak Ditemukan</div>
+                                            <div class="text-secondary" style="font-size: 0.75rem;">
+                                                No. HP "<strong>{{ customerPhoneQuery }}</strong>" belum terdaftar di Master Membership.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 <!-- Member Loyalty Summary & Drug Allergy Badge -->
                                 <div v-if="selectedCustomerDetails" class="p-3 rounded-3 border border-primary border-opacity-25 bg-primary bg-opacity-10 text-dark">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <div>
                                             <span class="badge bg-primary text-uppercase me-1">{{ selectedCustomerDetails.membership_level || 'MEMBER' }}</span>
-                                            <strong class="text-dark">{{ selectedCustomerDetails.name }}</strong>
+                                            <strong class="text-dark font-monospace"><i class="bx bx-phone me-1 text-primary"></i>{{ selectedCustomerDetails.phone }}</strong>
+                                            <span class="text-muted small ms-2">({{ selectedCustomerDetails.name }})</span>
                                         </div>
                                         <span class="badge bg-success font-monospace">{{ selectedCustomerDetails.points }} Pts</span>
                                     </div>
@@ -1792,7 +2068,7 @@ const printReceipt = () => {
                                         <tbody>
                                             <tr>
                                                 <td style="width: 130px;"><span class="badge bg-dark font-monospace fs-7">F3</span></td>
-                                                <td>Pilih Pelanggan / Member Apotek</td>
+                                                <td>Cari / Pilih Member Apotek (Berdasarkan No. Telp)</td>
                                             </tr>
                                             <tr>
                                                 <td><span class="badge bg-dark font-monospace fs-7">F4</span></td>
@@ -1953,5 +2229,27 @@ const printReceipt = () => {
 
 .animate-pulse {
     animation: pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.pos-member-dropdown-card {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 18px rgba(56, 189, 248, 0.12) !important;
+    border-radius: 12px !important;
+}
+
+.member-select-item {
+    transition: all 0.15s ease-in-out;
+    background-color: transparent;
+    cursor: pointer;
+}
+
+.member-select-item:hover {
+    background-color: rgba(56, 189, 248, 0.14) !important;
+}
+
+.member-select-item.member-item-active {
+    background-color: rgba(56, 189, 248, 0.24) !important;
+    border-left: 4px solid #38bdf8 !important;
 }
 </style>
