@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Models\Sale;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Services\OutletService;
 use Inertia\Inertia;
+
 
 class SalesHistoryController extends Controller
 {
