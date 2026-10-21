@@ -122,6 +122,7 @@ use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\FinancialManagementController;
 
 use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Purchases\PurchaseInvoiceController;
 
 // -------------------------------------------------------------
 // 1. Shared Authenticated Routes (Kasir, Admin, Owner)
@@ -189,6 +190,18 @@ Route::middleware(['auth', 'role:admin,owner'])->group(function () {
     Route::get('/doctors', [DoctorController::class, 'index'])->name('doctors.index');
     Route::post('/doctors', [DoctorController::class, 'store'])->name('doctors.store');
 
+    // Faktur Pembelian Farmasi (Penerimaan Barang & Invoice PBF)
+    Route::get('/purchases/invoices', [PurchaseInvoiceController::class, 'index'])->name('purchases.invoices.index');
+    Route::get('/purchases/invoices/create', [PurchaseInvoiceController::class, 'create'])->name('purchases.invoices.create');
+    Route::post('/purchases/invoices', [PurchaseInvoiceController::class, 'store'])->name('purchases.invoices.store');
+    Route::get('/purchases/invoices/{id}', [PurchaseInvoiceController::class, 'show'])->name('purchases.invoices.show');
+    Route::get('/purchases/invoices/{id}/edit', [PurchaseInvoiceController::class, 'edit'])->name('purchases.invoices.edit');
+    Route::put('/purchases/invoices/{id}', [PurchaseInvoiceController::class, 'update'])->name('purchases.invoices.update');
+    Route::delete('/purchases/invoices/{id}', [PurchaseInvoiceController::class, 'destroy'])->name('purchases.invoices.destroy');
+    Route::post('/purchases/invoices/{id}/finalize', [PurchaseInvoiceController::class, 'finalize'])->name('purchases.invoices.finalize');
+    Route::post('/purchases/invoices/{id}/cancel', [PurchaseInvoiceController::class, 'cancel'])->name('purchases.invoices.cancel');
+    Route::get('/purchases/invoices/{id}/print', [PurchaseInvoiceController::class, 'print'])->name('purchases.invoices.print');
+
     // Purchases & Purchase Orders (PO)
     Route::get('/purchases', [PurchaseOrderController::class, 'index'])->name('purchases.index');
     Route::get('/purchases/po', [PurchaseOrderController::class, 'index'])->name('purchases.po.index');
@@ -201,11 +214,16 @@ Route::middleware(['auth', 'role:admin,owner'])->group(function () {
     Route::get('/purchases/po/{id}/receive', [PurchaseOrderController::class, 'receiveForm'])->name('purchases.po.receive');
     Route::post('/purchases/po/{id}/receive', [PurchaseOrderController::class, 'receiveStore'])->name('purchases.po.receive.store');
 
-    // Real Stock Overview
-    Route::get('/inventory/stocks', [\App\Http\Controllers\Api\StockMovementController::class, 'realStock'])->name('inventory.stocks');
+    // Unified Stock & Outlet Product Management Hub
+    Route::get('/inventory/stocks', [\App\Http\Controllers\Inventory\StockUnifiedController::class, 'index'])->name('inventory.stocks');
+    Route::get('/inventory/stocks-per-outlet', function (\Illuminate\Http\Request $request) {
+        return redirect()->route('inventory.stocks', array_merge(['tab' => 'outlet'], $request->all()));
+    })->name('inventory.stocks-per-outlet');
+    Route::get('/inventory/outlet-products', function (\Illuminate\Http\Request $request) {
+        return redirect()->route('inventory.stocks', array_merge(['tab' => 'outlet'], $request->all()));
+    })->name('inventory.outlet-products.index');
 
-    // Stock per Outlet & Stock Transfer
-    Route::get('/inventory/stocks-per-outlet', [\App\Http\Controllers\Inventory\StockTransferController::class, 'stockPerOutlet'])->name('inventory.stocks-per-outlet');
+    // Stock Transfer
     Route::get('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'index'])->name('stock-transfers.index');
     Route::get('/inventory/stock-transfers/create', [\App\Http\Controllers\Inventory\StockTransferController::class, 'create'])->name('stock-transfers.create');
     Route::post('/inventory/stock-transfers', [\App\Http\Controllers\Inventory\StockTransferController::class, 'store'])->name('stock-transfers.store');
@@ -213,8 +231,7 @@ Route::middleware(['auth', 'role:admin,owner'])->group(function () {
     Route::post('/inventory/stock-transfers/{id}/receive', [\App\Http\Controllers\Inventory\StockTransferController::class, 'receive'])->name('stock-transfers.receive');
     Route::post('/inventory/stock-transfers/{id}/cancel', [\App\Http\Controllers\Inventory\StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
 
-    // Outlet Product Management
-    Route::get('/inventory/outlet-products', [\App\Http\Controllers\Inventory\OutletProductController::class, 'index'])->name('inventory.outlet-products.index');
+    // Outlet Product Management Actions
     Route::post('/inventory/outlet-products/attach', [\App\Http\Controllers\Inventory\OutletProductController::class, 'attach'])->name('inventory.outlet-products.attach');
     Route::put('/inventory/outlet-products/{id}/price', [\App\Http\Controllers\Inventory\OutletProductController::class, 'updatePrice'])->name('inventory.outlet-products.update-price');
     Route::post('/inventory/outlet-products/{id}/toggle-status', [\App\Http\Controllers\Inventory\OutletProductController::class, 'toggleStatus'])->name('inventory.outlet-products.toggle-status');

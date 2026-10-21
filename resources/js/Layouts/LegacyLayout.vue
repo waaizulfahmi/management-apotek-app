@@ -332,7 +332,11 @@ const logout = () => {
                         <i class="bx bx-notepad sidebar__icon"></i>
                         <span class="sidebar__text">Resep Dokter</span>
                     </Link>
-                    <Link :href="route('purchases.index')" class="sidebar__link" :class="{ 'active': route().current('purchases.*') }">
+                    <Link :href="route('purchases.invoices.index')" class="sidebar__link" :class="{ 'active': route().current('purchases.invoices.*') }">
+                        <i class="bx bx-receipt sidebar__icon"></i>
+                        <span class="sidebar__text">Faktur Pembelian</span>
+                    </Link>
+                    <Link :href="route('purchases.index')" class="sidebar__link" :class="{ 'active': (route().current('purchases.*') || route().current('purchases.po.*')) && !route().current('purchases.invoices.*') }">
                         <i class="bx bx-cart-download sidebar__icon"></i>
                         <span class="sidebar__text">Pembelian PO</span>
                     </Link>
@@ -347,17 +351,9 @@ const logout = () => {
                         <i class="bx bx-capsule sidebar__icon"></i>
                         <span class="sidebar__text">Kelola Obat</span>
                     </Link>
-                    <Link :href="route('inventory.stocks')" class="sidebar__link" :class="{ 'active': route().current('inventory.stocks') }">
-                        <i class="bx bx-package sidebar__icon"></i>
-                        <span class="sidebar__text">Stok Real Time</span>
-                    </Link>
-                    <Link :href="route('inventory.stocks-per-outlet')" class="sidebar__link" :class="{ 'active': route().current('inventory.stocks-per-outlet') }">
-                        <i class="bx bx-store-alt sidebar__icon"></i>
-                        <span class="sidebar__text">Stok Per Outlet</span>
-                    </Link>
-                    <Link :href="route('inventory.outlet-products.index')" class="sidebar__link" :class="{ 'active': route().current('inventory.outlet-products.*') }">
-                        <i class="bx bx-list-check sidebar__icon"></i>
-                        <span class="sidebar__text">Produk Per Outlet</span>
+                    <Link :href="route('inventory.stocks')" class="sidebar__link" :class="{ 'active': route().current('inventory.stocks*') || route().current('inventory.stocks-per-outlet*') || route().current('inventory.outlet-products.*') }">
+                        <i class="bx bx-layer sidebar__icon"></i>
+                        <span class="sidebar__text">Stok & Produk Outlet</span>
                     </Link>
                     <Link :href="route('stock-transfers.index')" class="sidebar__link" :class="{ 'active': route().current('stock-transfers.*') }">
                         <i class="bx bx-transfer-alt sidebar__icon"></i>
