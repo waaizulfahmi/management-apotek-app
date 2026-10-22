@@ -473,7 +473,7 @@ const printMedicineLedger = () => {
                                     <th>Transaksi (Qty & Satuan)</th>
                                     <th class="text-end text-success">Masuk (+)</th>
                                     <th class="text-end text-danger">Keluar (-)</th>
-                                    <th class="text-end fw-bold">Saldo Base Stock</th>
+                                    <th class="text-end fw-bold">Saldo Stok</th>
                                     <th>User</th>
                                     <th class="text-center" style="min-width: 90px;">Aksi</th>
                                 </tr>
