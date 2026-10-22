@@ -560,13 +560,18 @@ class StockMovementController extends Controller implements HasMiddleware
         $closingStock = $startDate ? ($openingStock + $totalIn - $totalOut) : ($totalIn - $totalOut);
 
         // Active batches for this medicine
-        $batchesQuery = DB::table('medicine_batches')
-            ->where('medicine_id', $medicineId)
-            ->where('stock', '>', 0);
-        if ($outletId) {
-            $batchesQuery->where('outlet_id', $outletId);
+        $batches = collect();
+        if (Schema::hasTable('medicine_batches')) {
+            $batchesQuery = DB::table('medicine_batches')
+                ->where('medicine_id', $medicineId)
+                ->where('stock', '>', 0);
+
+            if ($outletId && Schema::hasColumn('medicine_batches', 'outlet_id')) {
+                $batchesQuery->where('outlet_id', $outletId);
+            }
+
+            $batches = $batchesQuery->orderBy('expired_date', 'asc')->get();
         }
-        $batches = $batchesQuery->orderBy('expired_date', 'asc')->get();
 
         $settings = Schema::hasTable('settings') ? DB::table('settings')->pluck('value', 'key')->all() : [];
 
