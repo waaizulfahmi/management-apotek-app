@@ -97,30 +97,62 @@ class ReturnService
 
         foreach ($productReturn->items as $item) {
             $medicine = Obat::where('kode', $item->medicine_id)->first();
-            
-            // If condition is 'Baik', return to active stock
+            if (!$medicine) continue;
+
+            $pStock = null;
+            if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+                $pStock = \App\Models\ProductStock::firstOrCreate(
+                    ['obat_id' => $item->medicine_id, 'outlet_id' => $outletId],
+                    ['stock' => 0, 'min_stock' => 5]
+                );
+                $outletStockBefore = (float)$pStock->stock;
+            } else {
+                $outletStockBefore = (float)$medicine->stok;
+            }
+
+            // If condition is 'Baik', return to active sellable stock
             if ($item->condition === 'Baik') {
                 if ($item->batch_id) {
                     $batch = MedicineBatch::find($item->batch_id);
                     if ($batch) {
-                        $stockBefore = $batch->stock;
                         $batch->increment('stock', $item->quantity);
-                        $this->logStockMovement($item, 'in', 'RETUR PENJUALAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId, $outletId);
                     }
                 }
                 $medicine->increment('stok', $item->quantity);
 
                 // Update outlet stock in product_stocks table
-                if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
-                    $pStock = \App\Models\ProductStock::firstOrCreate(
-                        ['obat_id' => $item->medicine_id, 'outlet_id' => $outletId],
-                        ['stock' => 0, 'min_stock' => 5]
-                    );
+                if ($pStock) {
                     $pStock->increment('stock', $item->quantity);
+                    $outletStockAfter = (float)$pStock->fresh()->stock;
+                } else {
+                    $outletStockAfter = (float)$medicine->fresh()->stok;
                 }
+
+                $this->logStockMovement(
+                    $item,
+                    'in',
+                    'SALE_RETURN',
+                    'RETUR PENJUALAN',
+                    $productReturn->return_number,
+                    $outletStockBefore,
+                    $outletStockAfter,
+                    $userId,
+                    $outletId
+                );
             } else {
-                // Log damaged stock movement without adding to sellable inventory
-                $this->logStockMovement($item, 'in', 'RETUR (RUSAK)', $productReturn->return_number, 0, 0, $userId, $outletId);
+                // Damaged return: does NOT increase sellable active stock
+                $outletStockAfter = $outletStockBefore;
+                $this->logStockMovement(
+                    $item,
+                    'return',
+                    'SALE_RETURN',
+                    'RETUR PENJUALAN (RUSAK)',
+                    $productReturn->return_number,
+                    $outletStockBefore,
+                    $outletStockAfter,
+                    $userId,
+                    $outletId
+                );
             }
         }
 
@@ -160,29 +192,48 @@ class ReturnService
 
         foreach ($productReturn->items as $item) {
             $medicine = Obat::where('kode', $item->medicine_id)->first();
-            
+            if (!$medicine) continue;
+
+            $pStock = null;
+            if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+                $pStock = \App\Models\ProductStock::where('obat_id', $item->medicine_id)
+                    ->where('outlet_id', $outletId)
+                    ->first();
+                $outletStockBefore = $pStock ? (float)$pStock->stock : (float)$medicine->stok;
+            } else {
+                $outletStockBefore = (float)$medicine->stok;
+            }
+
             if ($item->batch_id) {
                 $batch = MedicineBatch::find($item->batch_id);
                 if ($batch) {
-                    $stockBefore = $batch->stock;
                     if ($batch->stock < $item->quantity) {
                         throw new Exception("Stok untuk batch ini tidak mencukupi untuk diretur.");
                     }
                     $batch->decrement('stock', $item->quantity);
-                    $this->logStockMovement($item, 'out', 'RETUR PEMBELIAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId, $outletId);
                 }
             }
             $medicine->decrement('stok', $item->quantity);
 
             // Deduct from outlet stock
-            if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
-                $pStock = \App\Models\ProductStock::where('obat_id', $item->medicine_id)
-                    ->where('outlet_id', $outletId)
-                    ->first();
-                if ($pStock) {
-                    $pStock->decrement('stock', $item->quantity);
-                }
+            if ($pStock) {
+                $pStock->decrement('stock', $item->quantity);
+                $outletStockAfter = (float)$pStock->fresh()->stock;
+            } else {
+                $outletStockAfter = (float)$medicine->fresh()->stok;
             }
+
+            $this->logStockMovement(
+                $item,
+                'out',
+                'PURCHASE_RETURN',
+                'RETUR PEMBELIAN',
+                $productReturn->return_number,
+                $outletStockBefore,
+                $outletStockAfter,
+                $userId,
+                $outletId
+            );
         }
 
         // Process Finance (Refunds / Receivables)
@@ -245,7 +296,7 @@ class ReturnService
     /**
      * Helper to log stock movement
      */
-    private function logStockMovement($item, $type, $movementType, $refNo, $before, $after, $userId, ?int $outletId = null)
+    private function logStockMovement($item, $type, $movementType, $notes, $refNo, $before, $after, $userId, ?int $outletId = null)
     {
         $smNo = 'SM-' . date('Ymd') . '-' . rand(10000, 99999);
         
@@ -257,13 +308,13 @@ class ReturnService
             'batch_number' => $item->batch->batch_number ?? 'BATCH-SYS',
             'expired_date' => $item->batch->expired_date ?? now()->toDateString(),
             'type' => $type,
-            'movement_type' => 'RETURN',
+            'movement_type' => $movementType,
             'quantity' => $item->quantity,
             'stock_before' => $before,
             'stock_after' => $after,
             'reference_number' => $refNo,
             'user_id' => $userId,
-            'notes' => $movementType,
+            'notes' => $notes,
             'status' => 'POSTED',
             'created_at' => now(),
             'updated_at' => now(),

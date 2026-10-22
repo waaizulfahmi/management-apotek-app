@@ -260,6 +260,24 @@ class ProductReturnOperationsTest extends TestCase
             ->value('stock');
         $this->assertEquals(50, $currentStock);
         $this->assertEquals(50, $this->obat->fresh()->stok);
+
+        // Check stock movement audit log
+        $sm = \Illuminate\Support\Facades\DB::table('stock_movements')
+            ->where('reference_number', $ret->return_number)
+            ->first();
+        $this->assertNotNull($sm);
+        $this->assertEquals(50, (float)$sm->stock_before);
+        $this->assertEquals(50, (float)$sm->stock_after);
+        $this->assertEquals('SALE_RETURN', $sm->movement_type);
+
+        // Check ledger API: closing_stock must NEVER be 0
+        $ledgerRes = $this->actingAs($this->admin)->getJson(route('inventory.movements.medicine-ledger', [
+            'medicine_id' => $this->obat->kode,
+            'outlet_id' => $this->outlet->id,
+        ]));
+        $ledgerRes->assertOk();
+        $this->assertEquals(50, $ledgerRes->json('summary.closing_stock'));
+        $this->assertEquals(0, $ledgerRes->json('summary.total_in'));
     }
 
     public function test_cannot_approve_already_approved_return()

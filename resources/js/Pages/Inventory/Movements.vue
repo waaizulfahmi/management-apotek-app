@@ -132,7 +132,10 @@ const formatNumber = (val) => {
     return new Intl.NumberFormat('id-ID').format(val || 0);
 };
 
-const getMovementLabel = (type) => {
+const getMovementLabel = (type, refNo = '') => {
+    if (type === 'RETURN') {
+        return (refNo && String(refNo).startsWith('RET-P')) ? 'Retur Beli' : 'Retur Jual';
+    }
     const labels = {
         'PURCHASE'       : 'Pembelian',
         'SALE'           : 'Penjualan',
@@ -149,6 +152,7 @@ const getMovementLabel = (type) => {
         'TRANSFER_OUT'   : 'Transfer Keluar',
         'INITIAL_STOCK'  : 'Stok Awal',
         'REVERSAL'       : 'Reversal',
+        'RETURN'         : 'Retur Jual',
     };
     return labels[type] || type;
 };
@@ -505,11 +509,11 @@ const printMedicineLedger = () => {
                                         <span class="badge" :class="{
                                             'bg-success': m.movement_type === 'PURCHASE' || m.movement_type === 'BONUS',
                                             'bg-primary': m.movement_type === 'SALE',
-                                            'bg-warning text-dark': m.movement_type === 'STOCK_OPNAME' || m.movement_type === 'PURCHASE_RETURN' || m.movement_type === 'SALE_RETURN',
+                                            'bg-warning text-dark': m.movement_type === 'STOCK_OPNAME' || m.movement_type === 'PURCHASE_RETURN' || m.movement_type === 'SALE_RETURN' || m.movement_type === 'RETURN',
                                             'bg-danger': m.movement_type === 'DAMAGED' || m.movement_type === 'EXPIRED' || m.movement_type === 'LOST',
                                             'bg-info text-dark': m.movement_type === 'TRANSFER_IN' || m.movement_type === 'TRANSFER_OUT' || m.movement_type === 'INITIAL_STOCK'
                                         }">
-                                            {{ getMovementLabel(m.movement_type) }}
+                                            {{ getMovementLabel(m.movement_type, m.reference_number) }}
                                         </span>
                                     </td>
                                     <td class="small font-monospace fw-bold text-primary">{{ m.reference_number || m.movement_number }}</td>
@@ -528,6 +532,9 @@ const printMedicineLedger = () => {
                                     <td class="text-end fw-bold">
                                         <span v-if="m.movement_type === 'STOCK_OPNAME' && m.quantity === 0" class="text-muted font-monospace">
                                             0
+                                        </span>
+                                        <span v-else-if="m.is_damaged_return || (m.notes && m.notes.includes('RUSAK'))" class="badge bg-danger-subtle text-danger border border-danger border-opacity-25" style="font-size: 0.72rem;">
+                                            0 (Rusak)
                                         </span>
                                         <span v-else-if="m.type === 'in'" class="text-success">
                                             +{{ formatNumber(m.quantity) }}
@@ -872,11 +879,11 @@ const printMedicineLedger = () => {
                                                     <span class="badge" :class="{
                                                         'bg-success': item.movement_type === 'PURCHASE' || item.movement_type === 'BONUS',
                                                         'bg-primary': item.movement_type === 'SALE',
-                                                        'bg-warning text-dark': item.movement_type === 'STOCK_OPNAME' || item.movement_type === 'PURCHASE_RETURN' || item.movement_type === 'SALE_RETURN',
+                                                        'bg-warning text-dark': item.movement_type === 'STOCK_OPNAME' || item.movement_type === 'PURCHASE_RETURN' || item.movement_type === 'SALE_RETURN' || item.movement_type === 'RETURN',
                                                         'bg-danger': item.movement_type === 'DAMAGED' || item.movement_type === 'EXPIRED' || item.movement_type === 'LOST',
                                                         'bg-info text-dark': item.movement_type === 'TRANSFER_IN' || item.movement_type === 'TRANSFER_OUT' || item.movement_type === 'INITIAL_STOCK'
                                                     }">
-                                                        {{ getMovementLabel(item.movement_type) }}
+                                                        {{ getMovementLabel(item.movement_type, item.reference_number) }}
                                                     </span>
                                                 </td>
                                                 <td class="small font-monospace fw-bold text-primary">{{ item.reference_number || item.movement_number }}</td>
@@ -890,7 +897,10 @@ const printMedicineLedger = () => {
                                                 </td>
                                                 <!-- Penambahan (+) -->
                                                 <td class="text-end fw-bold">
-                                                    <span v-if="item.type === 'in'" class="text-success font-monospace">
+                                                    <span v-if="item.is_damaged_return || (item.notes && item.notes.includes('RUSAK'))" class="badge bg-danger-subtle text-danger border border-danger border-opacity-25" style="font-size: 0.72rem;">
+                                                        0 (Rusak)
+                                                    </span>
+                                                    <span v-else-if="item.type === 'in'" class="text-success font-monospace">
                                                         +{{ formatNumber(item.quantity) }}
                                                     </span>
                                                     <span v-else class="text-muted">—</span>
@@ -1022,11 +1032,15 @@ const printMedicineLedger = () => {
                         <tr v-for="(item, idx) in stockCardData.ledger" :key="item.id">
                             <td class="text-center">{{ idx + 1 }}</td>
                             <td>{{ item.created_at }}</td>
-                            <td>{{ getMovementLabel(item.movement_type) }}</td>
+                            <td>{{ getMovementLabel(item.movement_type, item.reference_number) }}</td>
                             <td class="font-monospace fw-bold">{{ item.reference_number || item.movement_number }}</td>
                             <td>{{ item.batch_number || '-' }} <span v-if="item.expired_date">({{ item.expired_date }})</span></td>
                             <td class="text-end fw-bold">{{ formatNumber(item.stock_before) }}</td>
-                            <td class="text-end fw-bold text-success">{{ item.type === 'in' ? '+' + formatNumber(item.quantity) : '-' }}</td>
+                            <td class="text-end fw-bold text-success">
+                                <span v-if="item.is_damaged_return || (item.notes && item.notes.includes('RUSAK'))" class="text-danger small">0 (Rusak)</span>
+                                <span v-else-if="item.type === 'in'">+{{ formatNumber(item.quantity) }}</span>
+                                <span v-else>-</span>
+                            </td>
                             <td class="text-end fw-bold text-danger">{{ item.type === 'out' ? '-' + formatNumber(item.quantity) : '-' }}</td>
                             <td class="text-end fw-bold">{{ formatNumber(item.stock_after) }}</td>
                             <td>{{ item.notes || '-' }} ({{ item.user_name || 'System' }})</td>

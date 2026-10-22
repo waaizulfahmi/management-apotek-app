@@ -540,14 +540,78 @@ class StockMovementController extends Controller implements HasMiddleware
 
         $movements = $movementsQuery->orderBy('stock_movements.id', 'desc')->get();
 
-        $totalIn = $movements->where('type', 'in')->sum('quantity');
+        // Process movements in chronological order (oldest to newest) to heal legacy/damaged return entries
+        $chronological = $movements->reverse();
+        $runningStock = null;
+
+        foreach ($chronological as $m) {
+            $isDamaged = (
+                stripos((string)$m->notes, 'RUSAK') !== false ||
+                stripos((string)$m->notes, 'DAMAGED') !== false ||
+                $m->movement_type === 'DAMAGED' ||
+                ($m->type === 'return' && stripos((string)$m->notes, 'RUSAK') !== false)
+            );
+
+            // Normalize legacy 'RETURN' movement_type
+            if ($m->movement_type === 'RETURN') {
+                $m->movement_type = (isset($m->reference_number) && str_starts_with($m->reference_number, 'RET-P'))
+                    ? 'PURCHASE_RETURN'
+                    : 'SALE_RETURN';
+            }
+
+            if ($runningStock === null) {
+                // Seed running stock from prior movement if available, or current physical stock
+                $prevStockAfter = DB::table('stock_movements')
+                    ->where('medicine_id', $medicineId)
+                    ->when($outletId, fn($q) => $q->where('outlet_id', $outletId))
+                    ->where('id', '<', $m->id)
+                    ->orderBy('id', 'desc')
+                    ->value('stock_after');
+
+                if ($prevStockAfter !== null && (float)$prevStockAfter > 0) {
+                    $runningStock = (float)$prevStockAfter;
+                } else {
+                    $runningStock = (float)($outletStock !== null ? $outletStock : $medicine->stok);
+                }
+            }
+
+            if ($isDamaged) {
+                $m->is_damaged_return = true;
+                // Damaged items do not alter sellable outlet inventory
+                if ($runningStock !== null) {
+                    $m->stock_before = $runningStock;
+                    $m->stock_after = $runningStock;
+                } elseif ($m->stock_before == 0 && $m->stock_after == 0) {
+                    $fallback = (float)($outletStock !== null ? $outletStock : $medicine->stok);
+                    $m->stock_before = $fallback;
+                    $m->stock_after = $fallback;
+                }
+            } else {
+                if ($m->stock_before == 0 && $m->stock_after == 0 && $runningStock !== null) {
+                    $m->stock_before = $runningStock;
+                    if ($m->type === 'in') {
+                        $m->stock_after = $runningStock + (float)$m->quantity;
+                    } elseif ($m->type === 'out') {
+                        $m->stock_after = max(0, $runningStock - (float)$m->quantity);
+                    }
+                }
+                $runningStock = (float)$m->stock_after;
+            }
+        }
+
+        $totalIn = $movements->filter(fn($m) => $m->type === 'in' && empty($m->is_damaged_return))->sum('quantity');
         $totalOut = $movements->where('type', 'out')->sum('quantity');
 
         $latestMovement = $movements->first();
         $earliestMovement = $movements->last();
 
+        $currentOutletStock = $outletStock !== null ? (float)$outletStock : (float)$medicine->stok;
         $stockBeforePeriod = $earliestMovement ? (float)$earliestMovement->stock_before : (float)$openingStock;
-        $stockAfterPeriod = $latestMovement ? (float)$latestMovement->stock_after : ($outletStock !== null ? (float)$outletStock : (float)$medicine->stok);
+        
+        $stockAfterPeriod = $latestMovement ? (float)$latestMovement->stock_after : $currentOutletStock;
+        if ($stockAfterPeriod == 0 && $currentOutletStock > 0 && (!$endDate || $endDate >= Carbon::today()->toDateString())) {
+            $stockAfterPeriod = $currentOutletStock;
+        }
 
         // Active batches for this medicine
         $batches = collect();
