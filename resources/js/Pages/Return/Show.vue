@@ -431,7 +431,7 @@ const totalReturnedQty = computed(() => {
                                     </div>
                                     <div class="font-monospace small text-dark mb-1">{{ productReturn.return_number }}</div>
                                     <div>Dicetak pada: {{ printTime }}</div>
-                                    <small class="d-block mt-1">Dokumen resmi retur barang Apotek Medika Sore.</small>
+                                    <small class="d-block mt-1">Dokumen resmi retur barang {{ $page.props.app_settings?.pharmacy_name || 'Apotek' }}.</small>
                                 </div>
                             </div>
                         </div>

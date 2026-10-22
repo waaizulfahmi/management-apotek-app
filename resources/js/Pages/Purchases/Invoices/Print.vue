@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -9,6 +9,8 @@ const props = defineProps({
         default: 'invoice'
     }
 });
+
+let wasDarkMode = false;
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val || 0);
@@ -31,11 +33,44 @@ const triggerPrint = () => {
     window.print();
 };
 
+const closeWindow = () => {
+    if (window.opener) {
+        window.close();
+    } else {
+        window.history.back();
+    }
+};
+
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        closeWindow();
+    }
+};
+
 onMounted(() => {
-    // Otomatis buka dialog print saat halaman dimuat
-    setTimeout(() => {
-        // window.print();
-    }, 500);
+    // Pastikan jendela print selalu bersih putih tanpa terpengaruh dark-mode
+    if (document.documentElement.classList.contains('dark-mode') || document.body.classList.contains('dark-mode')) {
+        wasDarkMode = true;
+        document.documentElement.classList.remove('dark-mode');
+        document.body.classList.remove('dark-mode');
+    }
+
+    window.addEventListener('keydown', handleKeydown);
+
+    // Buka print dialog otomatis saat jendela popup selesai dimuat
+    if (window.opener) {
+        setTimeout(() => {
+            window.print();
+        }, 500);
+    }
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
+    if (wasDarkMode) {
+        document.documentElement.classList.add('dark-mode');
+        document.body.classList.add('dark-mode');
+    }
 });
 </script>
 
@@ -49,6 +84,9 @@ onMounted(() => {
                 <Link :href="route('purchases.invoices.show', invoice.id)" class="btn btn-outline-secondary btn-sm">
                     <i class="bx bx-arrow-back"></i> Kembali ke Faktur
                 </Link>
+                <button type="button" class="btn btn-outline-dark btn-sm" @click="closeWindow">
+                    <i class="bx bx-x"></i> Tutup
+                </button>
                 <span class="text-muted">|</span>
                 <span class="fw-semibold">
                     {{ print_type === 'receiving_slip' ? 'Bukti Penerimaan Barang (GRN)' : 'Faktur Pembelian Farmasi' }}
@@ -63,20 +101,57 @@ onMounted(() => {
 
         <!-- Document Container -->
         <div class="document-sheet mx-auto p-4 border" style="max-width: 900px; font-size: 13px;">
-            <!-- Apotek Header -->
-            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
-                <div>
-                    <h4 class="fw-bold mb-1 text-primary">APOTEK & INSTALASI FARMASI</h4>
-                    <p class="mb-0 text-muted small">Sistem Manajemen Pengadaan & Distribusi Obat Terpadu</p>
-                    <p class="mb-0 text-muted small">Outlet: <strong>{{ invoice.outlet?.name || 'Gudang Farmasi Pusat' }}</strong></p>
-                </div>
-                <div class="text-end">
-                    <h5 class="fw-bold text-dark mb-1">
-                        {{ print_type === 'receiving_slip' ? 'BUKTI PENERIMAAN BARANG' : 'FAKTUR PEMBELIAN FARMASI' }}
-                    </h5>
-                    <div class="font-monospace fw-bold text-primary">{{ invoice.receipt_number }}</div>
-                    <div class="small text-muted" v-if="invoice.invoice_number">
-                        No. Faktur PBF: <strong>{{ invoice.invoice_number }}</strong>
+            <!-- Kop Surat Resmi Apotek (Disesuaikan dengan Pengaturan Profil Apotek) -->
+            <div class="kop-surat pb-3 mb-3 border-bottom-double">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="d-flex align-items-center gap-3">
+                        <img 
+                            v-if="$page.props.app_settings?.pharmacy_logo" 
+                            :src="$page.props.app_settings.pharmacy_logo" 
+                            alt="Logo Apotek" 
+                            class="kop-logo"
+                            style="max-height: 58px; max-width: 120px; object-fit: contain;"
+                        >
+                        <div>
+                            <h4 class="fw-bold mb-1 text-primary text-uppercase" style="letter-spacing: 0.5px;">
+                                {{ $page.props.app_settings?.pharmacy_name || 'APOTEK' }}
+                            </h4>
+                            <p class="mb-0 text-dark small">
+                                {{ $page.props.app_settings?.pharmacy_address || '-' }}
+                            </p>
+                            <p class="mb-0 text-muted small">
+                                <span v-if="$page.props.app_settings?.pharmacy_phone">
+                                    Telp/WA: <strong>{{ $page.props.app_settings.pharmacy_phone }}</strong>
+                                </span>
+                                <span v-if="$page.props.app_settings?.pharmacist_name" class="ms-2">
+                                    | Apoteker: <strong>{{ $page.props.app_settings.pharmacist_name }}</strong>
+                                </span>
+                                <span v-if="$page.props.app_settings?.pharmacist_license" class="ms-2">
+                                    | SIPA: <strong>{{ $page.props.app_settings.pharmacist_license }}</strong>
+                                </span>
+                            </p>
+                            <p class="mb-0 text-muted small" v-if="invoice.outlet?.name">
+                                Unit / Outlet Cabang: <strong>{{ invoice.outlet.name }}</strong>
+                                <span v-if="invoice.outlet.address && invoice.outlet.address !== $page.props.app_settings?.pharmacy_address" class="ms-1">
+                                    ({{ invoice.outlet.address }})
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <h5 class="fw-bold text-dark mb-1 text-uppercase">
+                            {{ print_type === 'receiving_slip' ? 'BUKTI PENERIMAAN BARANG' : 'FAKTUR PEMBELIAN FARMASI' }}
+                        </h5>
+                        <div class="font-monospace fw-bold text-primary">{{ invoice.receipt_number }}</div>
+                        <div class="small text-muted" v-if="invoice.invoice_number">
+                            No. Faktur PBF: <strong class="text-dark">{{ invoice.invoice_number }}</strong>
+                        </div>
+                        <div class="small text-muted" v-if="invoice.purchase_order">
+                            No. SP / PO: <strong class="text-dark">{{ invoice.purchase_order.po_number }}</strong>
+                        </div>
+                        <div class="small text-muted">
+                            Tanggal: <strong class="text-dark">{{ formatDate(invoice.purchase_date) }}</strong>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -226,36 +301,76 @@ onMounted(() => {
                 </div>
                 <div class="col-4">
                     <p class="mb-5">Apoteker Penanggung Jawab,</p>
-                    <p class="fw-bold mb-0 border-bottom d-inline-block px-4">(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</p>
-                    <small class="text-muted d-block mt-1">SIPA: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</small>
+                    <p class="fw-bold mb-0 border-bottom d-inline-block px-3">
+                        ( {{ $page.props.app_settings?.pharmacist_name || 'Apoteker Penanggung Jawab' }} )
+                    </p>
+                    <small class="text-muted d-block mt-1">
+                        SIPA: {{ $page.props.app_settings?.pharmacist_license || '-' }}
+                    </small>
                 </div>
             </div>
 
             <!-- Footer Stamp -->
             <div class="border-top pt-2 mt-4 text-center text-muted small" style="font-size: 11px;">
-                Dokumen dicetak pada {{ formatDateTime(new Date()) }} melalui Sistem Informasi Manajemen Apotek.
+                Dokumen dicetak pada {{ formatDateTime(new Date()) }} melalui Sistem Informasi Manajemen Apotek - {{ $page.props.app_settings?.pharmacy_name }}.
             </div>
         </div>
     </div>
 </template>
 
 <style>
+.border-bottom-double {
+    border-bottom: 3px double #0f172a !important;
+}
+
+html, body, #app, .print-wrapper {
+    background: #f1f5f9 !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+.document-sheet {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+}
+
+.table th, .table td {
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+.table-light th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
 @media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
+    }
+    html, body, #app, .print-wrapper {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
     .no-print {
         display: none !important;
     }
-    .print-wrapper {
-        padding: 0 !important;
-        background: white !important;
-    }
     .document-sheet {
         border: none !important;
+        box-shadow: none !important;
         max-width: 100% !important;
         width: 100% !important;
         padding: 0 !important;
+        margin: 0 !important;
     }
-    body {
-        background: white !important;
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 }
 </style>

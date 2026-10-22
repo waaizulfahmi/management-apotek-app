@@ -542,7 +542,7 @@ const logout = () => {
 
             <!-- Sticky Layout Footer -->
             <footer class="layout-footer text-center py-3 text-muted border-top mt-5" style="font-size: 0.82rem;">
-                Made with <i class="bx bxs-heart text-danger mx-1"></i> for <strong>Apotek Medika Sore</strong> &copy; {{ new Date().getFullYear() }} — All Rights Reserved.
+                Made with <i class="bx bxs-heart text-danger mx-1"></i> for <strong>{{ $page.props.app_settings?.pharmacy_name || 'Apotek' }}</strong> &copy; {{ new Date().getFullYear() }} — All Rights Reserved.
             </footer>
         </main>
     </div>

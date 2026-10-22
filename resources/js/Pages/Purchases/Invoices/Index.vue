@@ -104,6 +104,16 @@ const confirmDeleteDraft = (invoice) => {
         }
     });
 };
+
+// Cetak via popup window
+const openPrintPopup = (invoiceId, type = 'invoice') => {
+    const url = route('purchases.invoices.print', invoiceId) + `?type=${type}`;
+    const width = 1000;
+    const height = 850;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    window.open(url, 'PrintInvoicePopup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes,status=no,toolbar=no,menubar=no`);
+};
 </script>
 
 <template>
@@ -418,15 +428,15 @@ const confirmDeleteDraft = (invoice) => {
                                                 <i class="bx bx-check-double"></i>
                                             </button>
 
-                                            <!-- Print Options for Final/Draft -->
-                                            <Link 
-                                                :href="route('purchases.invoices.print', inv.id)" 
-                                                target="_blank" 
+                                            <!-- Print Options for Final/Draft (Popup) -->
+                                            <button 
+                                                type="button" 
                                                 class="btn-action-icon btn-action-print" 
-                                                title="Cetak Faktur / Bukti Terima"
+                                                @click="openPrintPopup(inv.id)"
+                                                title="Cetak Faktur (Popup)"
                                             >
                                                 <i class="bx bx-printer"></i>
-                                            </Link>
+                                            </button>
 
                                             <!-- Delete Draft -->
                                             <button 

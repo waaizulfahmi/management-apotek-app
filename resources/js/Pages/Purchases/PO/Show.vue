@@ -95,7 +95,103 @@ const cancelPO = () => {
 };
 
 const printInvoice = () => {
-    window.print();
+    const printableElement = document.getElementById('printableReceipt');
+    if (!printableElement) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.name = 'printPOFrame';
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow || iframe.contentDocument;
+    const iframeDoc = doc.document || doc;
+
+    iframeDoc.open();
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <title>Surat_Pesanan_${props.po?.po_number || 'PO'}</title>
+            <style>
+                @page { size: A4 portrait; margin: 12mm 14mm; }
+                * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    font-size: 12px;
+                    line-height: 1.45;
+                    color: #0f172a;
+                    background: #ffffff;
+                    margin: 0;
+                    padding: 0;
+                }
+                .border-bottom-double { border-bottom: 3px double #0f172a !important; }
+                .d-flex { display: flex !important; }
+                .justify-content-between { justify-content: space-between !important; }
+                .align-items-start { align-items: flex-start !important; }
+                .align-items-center { align-items: center !important; }
+                .gap-3 { gap: 16px !important; }
+                .fw-bold { font-weight: 700 !important; }
+                .text-uppercase { text-transform: uppercase !important; }
+                .text-dark { color: #0f172a !important; }
+                .text-primary { color: #1d4ed8 !important; }
+                .text-muted { color: #64748b !important; }
+                .text-center { text-align: center !important; }
+                .text-end { text-align: right !important; }
+                .small { font-size: 11px !important; }
+                .fs-5 { font-size: 15px !important; }
+                .fs-6 { font-size: 13px !important; }
+                .font-monospace { font-family: "Courier New", Courier, monospace !important; }
+                .mb-0 { margin-bottom: 0 !important; }
+                .mb-1 { margin-bottom: 4px !important; }
+                .mb-3 { margin-bottom: 12px !important; }
+                .mb-4 { margin-bottom: 16px !important; }
+                .mb-5 { margin-bottom: 35px !important; }
+                .mt-1 { margin-top: 4px !important; }
+                .mt-5 { margin-top: 30px !important; }
+                .ms-2 { margin-left: 8px !important; }
+                .pb-3 { padding-bottom: 12px !important; }
+                .pt-1 { padding-top: 4px !important; }
+                .pt-3 { padding-top: 12px !important; }
+                .d-block { display: block !important; }
+                .border-top { border-top: 1px solid #94a3b8 !important; }
+                .row { display: flex; flex-wrap: wrap; margin-left: -8px; margin-right: -8px; }
+                .col-4 { width: 33.333%; padding: 0 8px; box-sizing: border-box; }
+                .col-6 { width: 50%; padding: 0 8px; box-sizing: border-box; }
+                table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
+                table th, table td { padding: 5px 8px; vertical-align: middle; }
+                .table-bordered th, .table-bordered td { border: 1px solid #94a3b8 !important; }
+                .table-light th { background-color: #f1f5f9 !important; color: #0f172a !important; font-weight: 700; }
+                .table-sm th, .table-sm td { padding: 4px 6px; }
+                img { max-height: 58px; max-width: 120px; object-fit: contain; }
+            </style>
+        </head>
+        <body>
+            ${printableElement.innerHTML}
+        </body>
+        </html>
+    `);
+    iframeDoc.close();
+
+    setTimeout(() => {
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (e) {
+            console.error('Print error:', e);
+        } finally {
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
+            }, 2500);
+        }
+    }, 300);
 };
 </script>
 
@@ -305,9 +401,15 @@ const printInvoice = () => {
                         </table>
                     </div>
 
-                    <div v-else class="alert alert-info py-3 px-3 mb-0 small text-slate-200">
-                        <i class="bx bx-info-circle me-2 text-info fs-5 align-middle"></i>
-                        Belum ada Faktur Pembelian yang diterbitkan untuk PO ini. Klik tombol <strong>"Buat Faktur Pembelian Baru"</strong> di atas apabila barang fisik telah tiba disertai faktur dari PBF untuk memasukkan nomor batch dan menambahkan stok obat ke apotek.
+                    <div v-else class="alert-po-empty p-3 mb-0 rounded-3 d-flex align-items-center gap-3">
+                        <div class="alert-icon-box flex-shrink-0">
+                            <i class="bx bx-info-circle fs-4 text-cyan"></i>
+                        </div>
+                        <div class="small leading-relaxed text-slate-100">
+                            <span>Belum ada Faktur Pembelian yang diterbitkan untuk PO ini. Klik tombol </span>
+                            <span class="badge bg-emerald text-white px-2 py-1 mx-1 fw-bold">"Buat Faktur Pembelian Baru"</span>
+                            <span>di atas apabila barang fisik telah tiba disertai faktur dari PBF untuk memasukkan nomor batch dan menambahkan stok obat ke apotek.</span>
+                        </div>
                     </div>
                 </div>
 
@@ -382,9 +484,16 @@ const printInvoice = () => {
                                 </div>
                             </div>
                         </div>
-                        <div v-else class="alert alert-secondary py-2 px-3 small text-slate-300 d-flex align-items-center gap-2 mb-0" style="border-radius: 8px;">
-                            <i class="bx bx-info-circle text-info fs-5"></i>
-                            <span><strong>Catatan Harga:</strong> Surat Pesanan ini tidak mencantumkan harga karena harga PBF dapat berubah sewaktu-waktu. Penetapan harga beli, diskon, dan PPN (11%) akan dicatat secara detail pada modul <strong>Faktur Pembelian</strong> ketika barang fisik dan faktur tiba.</span>
+                        <div v-else class="alert-po-price-note p-3 rounded-3 d-flex align-items-center gap-3 mb-0">
+                            <div class="alert-icon-box flex-shrink-0">
+                                <i class="bx bx-info-circle text-amber fs-4"></i>
+                            </div>
+                            <div class="small leading-relaxed text-slate-100">
+                                <strong class="text-amber me-1">Catatan Harga:</strong>
+                                <span>Surat Pesanan ini tidak mencantumkan harga karena harga PBF dapat berubah sewaktu-waktu. Penetapan harga beli, diskon, dan PPN (11%) akan dicatat secara detail pada modul </span>
+                                <strong class="text-cyan">Faktur Pembelian</strong>
+                                <span> ketika barang fisik dan faktur tiba.</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -402,20 +511,41 @@ const printInvoice = () => {
                     </div>
                     <div class="modal-body p-4">
                         <div id="printableReceipt" class="p-4 border bg-white text-dark">
-                            <!-- Printable Header -->
-                            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
-                                <div class="d-flex align-items-center gap-3">
-                                    <img v-if="$page.props.app_settings?.pharmacy_logo" :src="$page.props.app_settings.pharmacy_logo" alt="Logo Apotek" style="max-height: 48px; object-fit: contain;">
-                                    <div>
-                                        <h4 class="fw-bold mb-0 text-primary">{{ $page.props.app_settings?.pharmacy_name || 'APOTEK MEDIKA SORA' }}</h4>
-                                        <p class="small text-muted mb-0">{{ $page.props.app_settings?.pharmacy_address || 'Jl. Raya Farmasi No. 10' }}</p>
-                                        <p class="small text-muted mb-0">Telp: {{ $page.props.app_settings?.pharmacy_phone || '021-5551234' }}</p>
+                            <!-- Kop Surat Resmi Apotek (Disesuaikan dengan Pengaturan Profil Apotek) -->
+                            <div class="kop-surat pb-3 mb-3 border-bottom-double">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <img 
+                                            v-if="$page.props.app_settings?.pharmacy_logo" 
+                                            :src="$page.props.app_settings.pharmacy_logo" 
+                                            alt="Logo Apotek" 
+                                            style="max-height: 58px; max-width: 120px; object-fit: contain;"
+                                        >
+                                        <div>
+                                            <h4 class="fw-bold mb-1 text-primary text-uppercase" style="letter-spacing: 0.5px;">
+                                                {{ $page.props.app_settings?.pharmacy_name || 'APOTEK' }}
+                                            </h4>
+                                            <p class="small text-dark mb-0">
+                                                {{ $page.props.app_settings?.pharmacy_address || '-' }}
+                                            </p>
+                                            <p class="small text-muted mb-0">
+                                                <span v-if="$page.props.app_settings?.pharmacy_phone">
+                                                    Telp/WA: <strong>{{ $page.props.app_settings.pharmacy_phone }}</strong>
+                                                </span>
+                                                <span v-if="$page.props.app_settings?.pharmacist_name" class="ms-2">
+                                                    | Apoteker: <strong>{{ $page.props.app_settings.pharmacist_name }}</strong>
+                                                </span>
+                                                <span v-if="$page.props.app_settings?.pharmacist_license" class="ms-2">
+                                                    | SIPA: <strong>{{ $page.props.app_settings.pharmacist_license }}</strong>
+                                                </span>
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="text-end">
-                                    <h4 class="fw-bold font-monospace mb-0 text-dark">SURAT PESANAN (PO)</h4>
-                                    <strong class="text-primary font-monospace fs-5 d-block">{{ po.po_number }}</strong>
-                                    <small class="text-muted">Tanggal: {{ formatDate(po.order_date) }}</small>
+                                    <div class="text-end">
+                                        <h4 class="fw-bold font-monospace mb-0 text-dark">SURAT PESANAN (PO)</h4>
+                                        <strong class="text-primary font-monospace fs-5 d-block">{{ po.po_number }}</strong>
+                                        <small class="text-muted">Tanggal: <strong>{{ formatDate(po.order_date) }}</strong></small>
+                                    </div>
                                 </div>
                             </div>
 
@@ -467,7 +597,12 @@ const printInvoice = () => {
                                 </div>
                                 <div class="col-4">
                                     <p class="mb-5">Disetujui Oleh (Apoteker),</p>
-                                    <strong class="border-top pt-1 d-block">{{ po.approved_by_name || 'Apoteker Penanggung Jawab' }}</strong>
+                                    <strong class="border-top pt-1 d-block">
+                                        {{ po.approved_by_name || $page.props.app_settings?.pharmacist_name || 'Apoteker Penanggung Jawab' }}
+                                    </strong>
+                                    <span v-if="$page.props.app_settings?.pharmacist_license" class="small text-muted d-block mt-1">
+                                        SIPA: {{ $page.props.app_settings.pharmacist_license }}
+                                    </span>
                                 </div>
                                 <div class="col-4">
                                     <p class="mb-5">Konfirmasi PBF / Supplier,</p>
@@ -657,5 +792,78 @@ const printInvoice = () => {
     padding: 3px 8px;
     font-size: 0.75rem;
     font-weight: 600;
+}
+
+/* ============================================================ */
+/* CALLOUT & NOTICE BOXES (HIGH CONTRAST & READABLE)            */
+/* ============================================================ */
+.alert-po-empty {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(8, 47, 73, 0.45)) !important;
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+    border-left: 5px solid #06b6d4 !important;
+    color: #f8fafc !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+:global(body:not(.dark-mode)) .alert-po-empty {
+    background: #f0f9ff !important;
+    border: 1px solid #bae6fd !important;
+    border-left: 5px solid #0284c7 !important;
+    color: #0c4a6e !important;
+    box-shadow: none;
+}
+
+:global(body:not(.dark-mode)) .alert-po-empty .text-slate-100 {
+    color: #0c4a6e !important;
+}
+
+.alert-po-price-note {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(69, 26, 3, 0.4)) !important;
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+    border-left: 5px solid #f59e0b !important;
+    color: #f8fafc !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+:global(body:not(.dark-mode)) .alert-po-price-note {
+    background: #fffbeb !important;
+    border: 1px solid #fde68a !important;
+    border-left: 5px solid #d97706 !important;
+    color: #78350f !important;
+    box-shadow: none;
+}
+
+:global(body:not(.dark-mode)) .alert-po-price-note .text-slate-100 {
+    color: #78350f !important;
+}
+
+:global(body:not(.dark-mode)) .alert-po-price-note .text-amber {
+    color: #b45309 !important;
+}
+
+:global(body:not(.dark-mode)) .alert-po-price-note .text-cyan {
+    color: #0284c7 !important;
+}
+
+.alert-icon-box {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+:global(body:not(.dark-mode)) .alert-icon-box {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.text-amber {
+    color: #fbbf24 !important;
+}
+
+.border-bottom-double {
+    border-bottom: 3px double #1e293b !important;
 }
 </style>

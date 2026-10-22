@@ -9,6 +9,161 @@ const props = defineProps({
 });
 
 const isProcessing = ref(false);
+const showPrintModal = ref(false);
+const printType = ref('invoice'); // 'invoice' or 'receiving_slip'
+
+const openPrintModal = (type = 'invoice') => {
+    printType.value = type;
+    showPrintModal.value = true;
+};
+
+const printDocument = () => {
+    const printableElement = document.getElementById('printableInvoiceModal');
+    if (!printableElement) return;
+
+    // Gunakan hidden iframe agar proses cetak 100% andal dan tidak menghasilkan lembar putih kosong
+    const iframe = document.createElement('iframe');
+    iframe.name = 'printInvoiceFrame';
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow || iframe.contentDocument;
+    const iframeDoc = doc.document || doc;
+
+    const documentTitle = `${printType.value === 'receiving_slip' ? 'Bukti_Penerimaan_Barang' : 'Faktur_Pembelian'}_${props.invoice?.receipt_number || 'Doc'}`;
+
+    iframeDoc.open();
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <title>${documentTitle}</title>
+            <style>
+                @page {
+                    size: A4 portrait;
+                    margin: 10mm 12mm;
+                }
+                * {
+                    box-sizing: border-box;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    font-size: 12px;
+                    line-height: 1.45;
+                    color: #0f172a;
+                    background: #ffffff;
+                    margin: 0;
+                    padding: 0;
+                }
+                .border-bottom-double {
+                    border-bottom: 3px double #0f172a !important;
+                }
+                .d-flex { display: flex !important; }
+                .justify-content-between { justify-content: space-between !important; }
+                .justify-content-end { justify-content: flex-end !important; }
+                .align-items-start { align-items: flex-start !important; }
+                .align-items-center { align-items: center !important; }
+                .gap-1 { gap: 4px !important; }
+                .gap-2 { gap: 8px !important; }
+                .gap-3 { gap: 16px !important; }
+                .text-uppercase { text-transform: uppercase !important; }
+                .fw-bold { font-weight: 700 !important; }
+                .fw-semibold { font-weight: 600 !important; }
+                .fw-medium { font-weight: 500 !important; }
+                .text-dark { color: #0f172a !important; }
+                .text-primary { color: #1d4ed8 !important; }
+                .text-secondary { color: #475569 !important; }
+                .text-muted { color: #64748b !important; }
+                .text-danger { color: #dc2626 !important; }
+                .text-success { color: #16a34a !important; }
+                .text-center { text-align: center !important; }
+                .text-end { text-align: right !important; }
+                .small { font-size: 11px !important; }
+                .fs-6 { font-size: 13px !important; }
+                .font-monospace { font-family: "Courier New", Courier, monospace !important; }
+                .mb-0 { margin-bottom: 0 !important; }
+                .mb-1 { margin-bottom: 4px !important; }
+                .mb-2 { margin-bottom: 8px !important; }
+                .mb-3 { margin-bottom: 12px !important; }
+                .mb-4 { margin-bottom: 16px !important; }
+                .mb-5 { margin-bottom: 35px !important; }
+                .mt-1 { margin-top: 4px !important; }
+                .mt-2 { margin-top: 8px !important; }
+                .mt-3 { margin-top: 12px !important; }
+                .mt-4 { margin-top: 16px !important; }
+                .mt-5 { margin-top: 30px !important; }
+                .ms-1 { margin-left: 4px !important; }
+                .ms-2 { margin-left: 8px !important; }
+                .me-1 { margin-right: 4px !important; }
+                .p-0 { padding: 0 !important; }
+                .p-1 { padding: 4px !important; }
+                .p-2 { padding: 8px !important; }
+                .p-3 { padding: 12px !important; }
+                .p-4 { padding: 16px !important; }
+                .px-3 { padding-left: 12px !important; padding-right: 12px !important; }
+                .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
+                .py-1 { padding-top: 4px !important; padding-bottom: 4px !important; }
+                .py-2 { padding-top: 8px !important; padding-bottom: 8px !important; }
+                .pb-2 { padding-bottom: 8px !important; }
+                .pb-3 { padding-bottom: 12px !important; }
+                .pt-1 { padding-top: 4px !important; }
+                .pt-2 { padding-top: 8px !important; }
+                .pt-3 { padding-top: 12px !important; }
+                .border { border: 1px solid #cbd5e1 !important; }
+                .border-top { border-top: 1px solid #cbd5e1 !important; }
+                .border-bottom { border-bottom: 1px solid #cbd5e1 !important; }
+                .d-inline-block { display: inline-block !important; }
+                .d-block { display: block !important; }
+                .bg-light { background-color: #f8fafc !important; }
+                .bg-white { background-color: #ffffff !important; }
+                .row { display: flex; flex-wrap: wrap; margin-left: -8px; margin-right: -8px; }
+                .col-4 { width: 33.333%; padding: 0 8px; box-sizing: border-box; }
+                .col-6 { width: 50%; padding: 0 8px; box-sizing: border-box; }
+                .col-12 { width: 100%; padding: 0 8px; box-sizing: border-box; }
+                table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
+                table th, table td { padding: 5px 8px; vertical-align: middle; }
+                .table-bordered th, .table-bordered td { border: 1px solid #94a3b8 !important; }
+                .table-light th { background-color: #f1f5f9 !important; color: #0f172a !important; font-weight: 700; }
+                .table-sm th, .table-sm td { padding: 4px 6px; }
+                .table-borderless th, .table-borderless td { border: none !important; }
+                .badge { display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 700; border-radius: 4px; border: 1px solid transparent; }
+                .bg-success { background-color: #dcfce7 !important; color: #15803d !important; border-color: #86efac !important; }
+                .bg-warning { background-color: #fef3c7 !important; color: #b45309 !important; border-color: #fde68a !important; }
+                .bg-danger { background-color: #fee2e2 !important; color: #b91c1c !important; border-color: #fca5a5 !important; }
+                .bg-info { background-color: #e0f2fe !important; color: #0369a1 !important; border-color: #7dd3fc !important; }
+                img { max-height: 58px; max-width: 120px; object-fit: contain; }
+            </style>
+        </head>
+        <body>
+            ${printableElement.innerHTML}
+        </body>
+        </html>
+    `);
+    iframeDoc.close();
+
+    setTimeout(() => {
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (e) {
+            console.error('Print error:', e);
+        } finally {
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
+            }, 2500);
+        }
+    }, 300);
+};
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val || 0);
@@ -175,20 +330,20 @@ const confirmDeleteDraft = () => {
 
                         <!-- Action for FINAL -->
                         <template v-if="invoice.status === 'FINAL'">
-                            <a 
-                                :href="route('purchases.invoices.print', invoice.id) + '?type=invoice'" 
-                                target="_blank" 
+                            <button 
+                                type="button" 
                                 class="btn btn-outline-dark fw-semibold"
+                                @click="openPrintModal('invoice')"
                             >
                                 <i class="bx bx-printer me-1"></i> Cetak Faktur
-                            </a>
-                            <a 
-                                :href="route('purchases.invoices.print', invoice.id) + '?type=receiving_slip'" 
-                                target="_blank" 
+                            </button>
+                            <button 
+                                type="button" 
                                 class="btn btn-outline-primary fw-semibold"
+                                @click="openPrintModal('receiving_slip')"
                             >
                                 <i class="bx bx-package me-1"></i> Cetak Bukti Terima Barang
-                            </a>
+                            </button>
                             <button 
                                 type="button" 
                                 class="btn btn-outline-danger fw-semibold" 
@@ -201,13 +356,13 @@ const confirmDeleteDraft = () => {
 
                         <!-- Print for CANCELLED -->
                         <template v-if="invoice.status === 'CANCELLED'">
-                            <a 
-                                :href="route('purchases.invoices.print', invoice.id) + '?type=receiving_slip'" 
-                                target="_blank" 
+                            <button 
+                                type="button" 
                                 class="btn btn-outline-secondary"
+                                @click="openPrintModal('receiving_slip')"
                             >
                                 <i class="bx bx-printer me-1"></i> Cetak Bukti Transaksi
-                            </a>
+                            </button>
                         </template>
                     </div>
                 </div>
@@ -494,6 +649,245 @@ const confirmDeleteDraft = () => {
                 </div>
             </div>
         </section>
+
+        <!-- ===== POPUP MODAL CETAK DOKUMEN FAKTUR & BUKTI TERIMA ===== -->
+        <div v-if="showPrintModal" class="modal fade show d-block no-print-backdrop" tabindex="-1" style="background: rgba(0,0,0,0.7);" aria-modal="true" role="dialog">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-primary text-white py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bx bx-printer fs-4"></i>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0">
+                                    {{ printType === 'receiving_slip' ? 'Pratinjau Cetak: Bukti Penerimaan Barang (GRN)' : 'Pratinjau Cetak: Faktur Pembelian Farmasi' }}
+                                </h5>
+                                <small class="text-white-50">KOP surat otomatis disesuaikan dengan Profil Apotek & Outlet</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" @click="showPrintModal = false"></button>
+                    </div>
+
+                    <div class="modal-body p-4 bg-light">
+                        <!-- Printable Document Sheet -->
+                        <div id="printableInvoiceModal" class="document-sheet mx-auto p-4 bg-white text-dark border shadow-sm" style="max-width: 920px; font-size: 13px;">
+                            <!-- Dynamic KOP Apotek (Disesuaikan dengan Pengaturan Profil Apotek) -->
+                            <div class="kop-surat-header pb-3 mb-3 border-bottom-double">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <img 
+                                            v-if="$page.props.app_settings?.pharmacy_logo" 
+                                            :src="$page.props.app_settings.pharmacy_logo" 
+                                            alt="Logo Apotek" 
+                                            class="kop-logo"
+                                            style="max-height: 58px; max-width: 120px; object-fit: contain;"
+                                        >
+                                        <div>
+                                            <h4 class="fw-bold mb-1 text-primary text-uppercase" style="letter-spacing: 0.5px;">
+                                                {{ $page.props.app_settings?.pharmacy_name || 'APOTEK' }}
+                                            </h4>
+                                            <p class="mb-0 text-dark small">
+                                                {{ $page.props.app_settings?.pharmacy_address || '-' }}
+                                            </p>
+                                            <p class="mb-0 text-muted small">
+                                                <span v-if="$page.props.app_settings?.pharmacy_phone">
+                                                    Telp/WA: <strong>{{ $page.props.app_settings.pharmacy_phone }}</strong>
+                                                </span>
+                                                <span v-if="$page.props.app_settings?.pharmacist_name" class="ms-2">
+                                                    | Apoteker: <strong>{{ $page.props.app_settings.pharmacist_name }}</strong>
+                                                </span>
+                                                <span v-if="$page.props.app_settings?.pharmacist_license" class="ms-2">
+                                                    | SIPA: <strong>{{ $page.props.app_settings.pharmacist_license }}</strong>
+                                                </span>
+                                            </p>
+                                            <p class="mb-0 text-muted small" v-if="invoice.outlet?.name">
+                                                Unit / Outlet Cabang: <strong>{{ invoice.outlet.name }}</strong>
+                                                <span v-if="invoice.outlet.address && invoice.outlet.address !== $page.props.app_settings?.pharmacy_address" class="ms-1">
+                                                    ({{ invoice.outlet.address }})
+                                                </span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="text-end">
+                                        <h5 class="fw-bold text-dark mb-1 text-uppercase">
+                                            {{ printType === 'receiving_slip' ? 'BUKTI PENERIMAAN BARANG' : 'FAKTUR PEMBELIAN FARMASI' }}
+                                        </h5>
+                                        <div class="font-monospace fw-bold text-primary fs-6">{{ invoice.receipt_number }}</div>
+                                        <div class="small text-muted" v-if="invoice.invoice_number">
+                                            No. Faktur PBF: <strong class="text-dark">{{ invoice.invoice_number }}</strong>
+                                        </div>
+                                        <div class="small text-muted" v-if="invoice.purchase_order">
+                                            No. SP / PO: <strong class="text-dark">{{ invoice.purchase_order.po_number }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Transaction Meta Details -->
+                            <div class="row g-3 mb-3 pb-2 border-bottom">
+                                <div class="col-6">
+                                    <table class="table table-sm table-borderless mb-0 small">
+                                        <tr>
+                                            <td class="text-muted p-0" style="width: 130px;">Supplier / PBF</td>
+                                            <td class="p-0 fw-bold">: {{ invoice.supplier?.name || '-' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">Kode PBF</td>
+                                            <td class="p-0">: {{ invoice.supplier?.code || '-' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">Alamat / Telp</td>
+                                            <td class="p-0">: {{ invoice.supplier?.phone || invoice.supplier?.address || '-' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">No. Surat Jalan</td>
+                                            <td class="p-0">: {{ invoice.delivery_order_number || '-' }}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                <div class="col-6">
+                                    <table class="table table-sm table-borderless mb-0 small">
+                                        <tr>
+                                            <td class="text-muted p-0" style="width: 130px;">Tanggal Faktur</td>
+                                            <td class="p-0">: {{ formatDate(invoice.purchase_date) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">Tanggal Terima</td>
+                                            <td class="p-0 fw-bold">: {{ formatDate(invoice.received_date) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">Jatuh Tempo</td>
+                                            <td class="p-0">: {{ formatDate(invoice.due_date) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted p-0">Jenis Pembayaran</td>
+                                            <td class="p-0 text-uppercase">: {{ invoice.payment_type || 'Kredit' }}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Items Table -->
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle small mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center" style="width: 35px;">#</th>
+                                            <th>NAMA OBAT & KODE</th>
+                                            <th class="text-center">NO. BATCH</th>
+                                            <th class="text-center">EXPIRED DATE</th>
+                                            <th class="text-center">JUMLAH BELI</th>
+                                            <th class="text-center">STOK MASUK</th>
+                                            <th class="text-end" v-if="printType !== 'receiving_slip'">HARGA SATUAN</th>
+                                            <th class="text-center" v-if="printType !== 'receiving_slip'">DISKON</th>
+                                            <th class="text-end" v-if="printType !== 'receiving_slip'">SUBTOTAL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(it, idx) in invoice.items" :key="it.id">
+                                            <td class="text-center">{{ idx + 1 }}</td>
+                                            <td>
+                                                <div class="fw-bold">{{ it.medicine?.nama || '-' }}</div>
+                                                <small class="text-muted font-monospace">{{ it.medicine_id }}</small>
+                                            </td>
+                                            <td class="text-center font-monospace">{{ it.batch_number || '-' }}</td>
+                                            <td class="text-center">{{ formatDate(it.expired_date) }}</td>
+                                            <td class="text-center">
+                                                {{ Number(it.quantity) }} {{ it.unit?.name || 'Unit' }}
+                                            </td>
+                                            <td class="text-center fw-bold text-success">
+                                                +{{ Number(it.quantity_base || it.quantity) }} {{ it.medicine?.satuanDasar?.name || 'Unit' }}
+                                            </td>
+                                            <td class="text-end font-monospace" v-if="printType !== 'receiving_slip'">
+                                                {{ formatCurrency(it.unit_price) }}
+                                            </td>
+                                            <td class="text-center" v-if="printType !== 'receiving_slip'">
+                                                <span v-if="Number(it.discount_percent) > 0">{{ Number(it.discount_percent) }}%</span>
+                                                <span v-else-if="Number(it.discount_amount) > 0">{{ formatCurrency(it.discount_amount) }}</span>
+                                                <span v-else>-</span>
+                                            </td>
+                                            <td class="text-end fw-bold font-monospace" v-if="printType !== 'receiving_slip'">
+                                                {{ formatCurrency(it.subtotal) }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Totals Breakdown (Hidden for GRN) -->
+                            <div class="row justify-content-end mb-3" v-if="printType !== 'receiving_slip'">
+                                <div class="col-5">
+                                    <table class="table table-sm table-borderless small mb-0">
+                                        <tr>
+                                            <td class="p-1">Subtotal Item:</td>
+                                            <td class="text-end p-1 font-monospace">{{ formatCurrency(invoice.subtotal) }}</td>
+                                        </tr>
+                                        <tr v-if="Number(invoice.discount_amount) > 0">
+                                            <td class="p-1 text-danger">Diskon Faktur:</td>
+                                            <td class="text-end p-1 font-monospace text-danger">- {{ formatCurrency(invoice.discount_amount) }}</td>
+                                        </tr>
+                                        <tr v-if="Number(invoice.tax_amount) > 0">
+                                            <td class="p-1">Pajak (PPN):</td>
+                                            <td class="text-end p-1 font-monospace">+ {{ formatCurrency(invoice.tax_amount) }}</td>
+                                        </tr>
+                                        <tr v-if="Number(invoice.shipping_cost) > 0">
+                                            <td class="p-1">Ongkos Kirim:</td>
+                                            <td class="text-end p-1 font-monospace">+ {{ formatCurrency(invoice.shipping_cost) }}</td>
+                                        </tr>
+                                        <tr class="border-top border-dark">
+                                            <td class="p-1 fw-bold fs-6">Total Faktur:</td>
+                                            <td class="text-end p-1 fw-bold fs-6 font-monospace text-primary">{{ formatCurrency(invoice.grand_total) }}</td>
+                                        </tr>
+                                        <tr v-if="Number(invoice.remaining_amount) > 0">
+                                            <td class="p-1 text-danger">Sisa Hutang:</td>
+                                            <td class="text-end p-1 font-monospace text-danger fw-bold">{{ formatCurrency(invoice.remaining_amount) }}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Signatures Block with Dynamic Pharmacist Name & SIPA -->
+                            <div class="row text-center mt-4 pt-3 border-top" style="font-size: 12px;">
+                                <div class="col-4">
+                                    <p class="mb-5 text-muted">Pengirim / Driver PBF,</p>
+                                    <p class="fw-bold mb-0 border-bottom d-inline-block px-4">(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</p>
+                                    <small class="text-muted d-block mt-1">Nama & Tanda Tangan</small>
+                                </div>
+                                <div class="col-4">
+                                    <p class="mb-5 text-muted">Petugas Penerima Fisik,</p>
+                                    <p class="fw-bold mb-0 border-bottom d-inline-block px-4 text-dark">
+                                        {{ invoice.finalized_by?.name || 'Petugas Farmasi' }}
+                                    </p>
+                                    <small class="text-muted d-block mt-1">Staf Logistik / Gudang</small>
+                                </div>
+                                <div class="col-4">
+                                    <p class="mb-5 text-muted">Apoteker Penanggung Jawab,</p>
+                                    <p class="fw-bold mb-0 border-bottom d-inline-block px-3 text-dark">
+                                        ( {{ $page.props.app_settings?.pharmacist_name || 'Apoteker Penanggung Jawab' }} )
+                                    </p>
+                                    <small class="text-muted d-block mt-1">
+                                        SIPA: {{ $page.props.app_settings?.pharmacist_license || '-' }}
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- Footer Stamp -->
+                            <div class="border-top pt-2 mt-4 text-center text-muted small" style="font-size: 11px;">
+                                Dokumen dicetak pada {{ formatDateTime(new Date()) }} melalui Sistem Informasi Manajemen Apotek - {{ $page.props.app_settings?.pharmacy_name }}.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer py-2 bg-white border-top">
+                        <button type="button" class="btn btn-secondary" @click="showPrintModal = false">
+                            <i class="bx bx-x me-1"></i> Tutup
+                        </button>
+                        <button type="button" class="btn btn-primary fw-bold px-4" @click="printDocument">
+                            <i class="bx bx-printer me-1"></i> Cetak Sekarang
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </LegacyLayout>
 </template>
 
@@ -544,5 +938,9 @@ const confirmDeleteDraft = () => {
     background-color: #0f172a !important;
     border-color: #334155 !important;
     color: #cbd5e1 !important;
+}
+
+.border-bottom-double {
+    border-bottom: 3px double #1e293b !important;
 }
 </style>

@@ -422,15 +422,74 @@ body.dark-mode .stat-box-red {
     margin-top: 15px !important;
 }
 
-/* Print Thermal Receipt Only Rule */
+/* ============================================================ */
+/* UNIVERSAL PRINT SYSTEM RULES                                 */
+/* ============================================================ */
 @media print {
-    body * {
+    /* Hide navigation and UI elements during printing */
+    .no-print,
+    .top-header,
+    .sidebar,
+    .sidebar__header,
+    .modal-backdrop,
+    .modal-footer,
+    .layout-footer,
+    .btn-action-icon,
+    nav,
+    aside,
+    button:not(.allow-print) {
+        display: none !important;
+    }
+
+    /* Reset page and backgrounds to pure white with crisp black text */
+    html, body, #app, .content, .main-wrapper, .layout-container {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Force dark-mode elements to print clearly in black text on white paper */
+    html.dark-mode,
+    body.dark-mode,
+    body.dark-mode #app,
+    body.dark-mode .content,
+    body.dark-mode .card,
+    body.dark-mode .modal-content,
+    body.dark-mode .bg-white,
+    body.dark-mode .table,
+    body.dark-mode .table td,
+    body.dark-mode .table th,
+    body.dark-mode .table thead,
+    body.dark-mode .table thead th {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #94a3b8 !important;
+    }
+
+    body.dark-mode .text-dark {
+        color: #0f172a !important;
+    }
+
+    body.dark-mode .text-muted {
+        color: #64748b !important;
+    }
+
+    body.dark-mode .text-primary {
+        color: #1d4ed8 !important;
+    }
+
+    /* Thermal receipt specific mode (only when explicitly scoped) */
+    body.thermal-print-mode * {
         visibility: hidden !important;
     }
-    #printableReceipt, #printableReceipt * {
+    body.thermal-print-mode #printableReceipt,
+    body.thermal-print-mode #printableReceipt * {
         visibility: visible !important;
     }
-    #printableReceipt {
+    body.thermal-print-mode #printableReceipt {
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
@@ -439,9 +498,6 @@ body.dark-mode .stat-box-red {
         padding: 5px !important;
         background: #fff !important;
         color: #000 !important;
-    }
-    .modal-backdrop, .modal-footer, button, .top-header, .sidebar {
-        display: none !important;
     }
 }
 
