@@ -7,6 +7,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Exception;
@@ -91,12 +92,14 @@ class StockMovementController extends Controller implements HasMiddleware
             ->join('obats', 'stock_movements.medicine_id', '=', 'obats.kode')
             ->join('users', 'stock_movements.user_id', '=', 'users.id')
             ->leftJoin('suppliers', 'stock_movements.supplier_id', '=', 'suppliers.id')
+            ->leftJoin('outlets', 'stock_movements.outlet_id', '=', 'outlets.id')
             ->select(
                 'stock_movements.*',
                 'obats.nama as medicine_name',
                 'obats.kategori as medicine_category',
                 'users.name as user_name',
-                'suppliers.name as supplier_name'
+                'suppliers.name as supplier_name',
+                'outlets.name as outlet_name'
             )
             ->whereBetween(DB::raw('DATE(stock_movements.created_at)'), [$startDate, $endDate]);
 
@@ -438,6 +441,157 @@ class StockMovementController extends Controller implements HasMiddleware
                 'kategori' => $kategori,
                 'stock_status' => $stockStatus,
             ]
+        ]);
+    }
+
+    /**
+     * Detail Transaksi Stok Penambahan & Pengurangan per Obat (Kartu Stok Detail)
+     */
+    public function medicineLedger(Request $request)
+    {
+        $medicineId = $request->input('medicine_id');
+        $outletId = $request->input('outlet_id');
+        $datePreset = $request->input('date_preset');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+
+        $medicine = DB::table('obats')->where('kode', $medicineId)->first();
+        if (!$medicine) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data obat tidak ditemukan.'
+            ], 404);
+        }
+
+        // 1. Resolve Date Range if preset provided
+        if ($datePreset === 'today') {
+            $startDate = Carbon::today()->toDateString();
+            $endDate = Carbon::today()->toDateString();
+        } elseif ($datePreset === 'yesterday') {
+            $startDate = Carbon::yesterday()->toDateString();
+            $endDate = Carbon::yesterday()->toDateString();
+        } elseif ($datePreset === '7days') {
+            $startDate = Carbon::now()->subDays(6)->toDateString();
+            $endDate = Carbon::now()->toDateString();
+        } elseif ($datePreset === '30days') {
+            $startDate = Carbon::now()->subDays(29)->toDateString();
+            $endDate = Carbon::now()->toDateString();
+        } elseif ($datePreset === 'last_month') {
+            $startDate = Carbon::now()->subMonth()->startOfMonth()->toDateString();
+            $endDate = Carbon::now()->subMonth()->endOfMonth()->toDateString();
+        } elseif ($datePreset === 'this_year') {
+            $startDate = Carbon::now()->startOfYear()->toDateString();
+            $endDate = Carbon::now()->endOfYear()->toDateString();
+        } elseif ($datePreset === 'this_month') {
+            $startDate = Carbon::now()->startOfMonth()->toDateString();
+            $endDate = Carbon::now()->endOfMonth()->toDateString();
+        }
+
+        // 2. Outlet information
+        $outlet = null;
+        if ($outletId) {
+            $outlet = DB::table('outlets')->where('id', $outletId)->first(['id', 'name', 'code']);
+        }
+
+        // 3. Current Stock in selected outlet vs Master Stock
+        $outletStock = null;
+        if ($outletId && Schema::hasTable('product_stocks')) {
+            $outletStock = DB::table('product_stocks')
+                ->where('obat_id', (string)$medicineId)
+                ->where('outlet_id', $outletId)
+                ->value('stock');
+        }
+
+        // 4. Calculate Opening Stock for this medicine
+        $openingQuery = DB::table('stock_movements')
+            ->where('medicine_id', $medicineId)
+            ->where('status', 'POSTED');
+
+        if ($outletId) {
+            $openingQuery->where('outlet_id', $outletId);
+        }
+        if ($startDate) {
+            $openingQuery->whereDate('created_at', '<', $startDate);
+        }
+
+        $openingIn = (clone $openingQuery)->where('type', 'in')->sum('quantity');
+        $openingOut = (clone $openingQuery)->where('type', 'out')->sum('quantity');
+        $openingStock = $startDate ? ($openingIn - $openingOut) : 0;
+
+        // 5. Query Detailed Movements
+        $movementsQuery = DB::table('stock_movements')
+            ->leftJoin('users', 'stock_movements.user_id', '=', 'users.id')
+            ->leftJoin('suppliers', 'stock_movements.supplier_id', '=', 'suppliers.id')
+            ->leftJoin('outlets', 'stock_movements.outlet_id', '=', 'outlets.id')
+            ->where('stock_movements.medicine_id', $medicineId)
+            ->select(
+                'stock_movements.*',
+                'users.name as user_name',
+                'suppliers.name as supplier_name',
+                'outlets.name as outlet_name'
+            );
+
+        if ($outletId) {
+            $movementsQuery->where('stock_movements.outlet_id', $outletId);
+        }
+        if ($startDate && $endDate) {
+            $movementsQuery->whereBetween(DB::raw('DATE(stock_movements.created_at)'), [$startDate, $endDate]);
+        }
+
+        $movements = $movementsQuery->orderBy('stock_movements.id', 'asc')->get();
+
+        // Calculate running balance chronologically
+        $runningBalance = $openingStock;
+        $ledger = $movements->map(function ($item) use (&$runningBalance) {
+            if ($item->type === 'in') {
+                $runningBalance += (float)$item->quantity;
+            } else {
+                $runningBalance -= (float)$item->quantity;
+            }
+            $item->calculated_running_balance = $runningBalance;
+            return $item;
+        });
+
+        // Reverse for display: newest first
+        $ledgerDesc = $ledger->reverse()->values();
+
+        $totalIn = $movements->where('type', 'in')->sum('quantity');
+        $totalOut = $movements->where('type', 'out')->sum('quantity');
+        $closingStock = $startDate ? ($openingStock + $totalIn - $totalOut) : ($totalIn - $totalOut);
+
+        // Active batches for this medicine
+        $batchesQuery = DB::table('medicine_batches')
+            ->where('medicine_id', $medicineId)
+            ->where('stock', '>', 0);
+        if ($outletId) {
+            $batchesQuery->where('outlet_id', $outletId);
+        }
+        $batches = $batchesQuery->orderBy('expired_date', 'asc')->get();
+
+        $settings = Schema::hasTable('settings') ? DB::table('settings')->pluck('value', 'key')->all() : [];
+
+        return response()->json([
+            'success' => true,
+            'settings' => $settings,
+            'medicine' => [
+                'kode' => $medicine->kode,
+                'nama' => $medicine->nama,
+                'kategori' => $medicine->kategori,
+                'stok_master' => (float)$medicine->stok,
+                'stok_outlet' => $outletStock !== null ? (float)$outletStock : (float)$medicine->stok,
+                'min_stok' => (float)$medicine->min_stok,
+                'satuan' => $medicine->satuan ?? 'Unit',
+            ],
+            'outlet' => $outlet,
+            'summary' => [
+                'opening_stock' => (float)$openingStock,
+                'total_in' => (float)$totalIn,
+                'total_out' => (float)$totalOut,
+                'closing_stock' => (float)$closingStock,
+                'current_stock' => $outletStock !== null ? (float)$outletStock : (float)$medicine->stok,
+            ],
+            'batches' => $batches,
+            'ledger' => $ledgerDesc,
         ]);
     }
 }

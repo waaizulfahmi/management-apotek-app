@@ -183,4 +183,70 @@ class MembershipAndStockCardTest extends TestCase
         $closingStock = $openingStock + $totalIn - $totalOut;
         $this->assertEquals(75, $closingStock);
     }
+
+    public function test_medicine_ledger_api_endpoint_filters_by_outlet()
+    {
+        // Add movement for Outlet A
+        DB::table('stock_movements')->insert([
+            'movement_number' => 'SM-OUT-A-01',
+            'outlet_id' => $this->outletA->id,
+            'medicine_id' => $this->obat->kode,
+            'type' => 'in',
+            'movement_type' => 'PURCHASE',
+            'quantity' => 50,
+            'stock_before' => 0,
+            'stock_after' => 50,
+            'user_id' => $this->admin->id,
+            'status' => 'POSTED',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Add movement for Outlet B
+        DB::table('stock_movements')->insert([
+            'movement_number' => 'SM-OUT-B-01',
+            'outlet_id' => $this->outletB->id,
+            'medicine_id' => $this->obat->kode,
+            'type' => 'in',
+            'movement_type' => 'PURCHASE',
+            'quantity' => 20,
+            'stock_before' => 0,
+            'stock_after' => 20,
+            'user_id' => $this->admin->id,
+            'status' => 'POSTED',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Test querying for Outlet A
+        $responseA = $this->actingAs($this->admin)->getJson(route('inventory.movements.medicine-ledger', [
+            'medicine_id' => $this->obat->kode,
+            'outlet_id' => $this->outletA->id,
+        ]));
+
+        $responseA->assertOk();
+        $responseA->assertJsonPath('success', true);
+        $responseA->assertJsonPath('medicine.kode', $this->obat->kode);
+        $responseA->assertJsonPath('summary.total_in', 50);
+
+        // Test querying for Outlet B
+        $responseB = $this->actingAs($this->admin)->getJson(route('inventory.movements.medicine-ledger', [
+            'medicine_id' => $this->obat->kode,
+            'outlet_id' => $this->outletB->id,
+        ]));
+
+        $responseB->assertOk();
+        $responseB->assertJsonPath('success', true);
+        $responseB->assertJsonPath('summary.total_in', 20);
+
+        // Test querying consolidated (no outlet_id specified)
+        $responseAll = $this->actingAs($this->admin)->getJson(route('inventory.movements.medicine-ledger', [
+            'medicine_id' => $this->obat->kode,
+        ]));
+
+        $responseAll->assertOk();
+        $responseAll->assertJsonPath('success', true);
+        $responseAll->assertJsonPath('summary.total_in', 70);
+    }
 }
+

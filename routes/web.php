@@ -277,6 +277,7 @@ Route::middleware(['auth', 'role:admin,owner'])->group(function () {
 Route::middleware(['auth', 'role:admin'])->group(function () {
     // Inventory Movement & Kartu Stok (Mutasi Stok - ADMIN ONLY)
     Route::get('/inventory/movements', [\App\Http\Controllers\Api\StockMovementController::class, 'index'])->name('inventory.movements');
+    Route::get('/inventory/movements/medicine-ledger', [\App\Http\Controllers\Api\StockMovementController::class, 'medicineLedger'])->name('inventory.movements.medicine-ledger');
     Route::get('/inventory/movements/reconcile', [\App\Http\Controllers\Api\StockMovementController::class, 'reconcile'])->name('inventory.movements.reconcile');
     Route::post('/inventory/movements/adjustment', [\App\Http\Controllers\Api\StockMovementController::class, 'storeAdjustment'])->name('inventory.movements.adjustment');
 
