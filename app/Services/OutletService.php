@@ -47,11 +47,9 @@ class OutletService
             return (int) $user->outlet_id;
         }
 
-        // Fallback to Main Outlet or first available outlet
-        $mainOutlet = DB::table('outlets')->where('is_main', true)->first() 
-            ?: DB::table('outlets')->first();
-
-        $outletId = $mainOutlet ? $mainOutlet->id : null;
+        // Fallback to user's accessible active outlet
+        $accessibleOutlet = self::getUserOutlets($user)->first();
+        $outletId = $accessibleOutlet ? $accessibleOutlet->id : null;
         if ($outletId) {
             session(['active_outlet_id' => $outletId]);
         }

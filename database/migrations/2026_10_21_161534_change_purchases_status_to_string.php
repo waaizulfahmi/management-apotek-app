@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Ubah enum status menjadi VARCHAR(30) agar mendukung 'DRAFT', 'FINAL', 'CANCELLED', 'received', dll
         DB::statement("ALTER TABLE purchases MODIFY status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'");
     }
@@ -21,6 +25,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE purchases MODIFY status ENUM('draft','ordered','received','cancelled') NOT NULL DEFAULT 'draft'");
     }
 };

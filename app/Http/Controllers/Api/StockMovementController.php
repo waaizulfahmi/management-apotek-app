@@ -28,6 +28,7 @@ class StockMovementController extends Controller implements HasMiddleware
         $datePreset = $request->input('date_preset', 'this_month');
         $startDate = $request->input('start_date');
         $endDate = $request->input('end_date');
+        $outletId = $request->input('outlet_id');
         $medicineId = $request->input('medicine_id');
         $kategori = $request->input('kategori');
         $warehouseName = $request->input('warehouse_name');
@@ -77,6 +78,9 @@ class StockMovementController extends Controller implements HasMiddleware
         if ($warehouseName) {
             $openingQuery->where('warehouse_name', $warehouseName);
         }
+        if ($outletId) {
+            $openingQuery->where('outlet_id', $outletId);
+        }
 
         $openingIn = (clone $openingQuery)->where('type', 'in')->sum('quantity');
         $openingOut = (clone $openingQuery)->where('type', 'out')->sum('quantity');
@@ -108,6 +112,9 @@ class StockMovementController extends Controller implements HasMiddleware
 
         if ($medicineId) {
             $query->where('stock_movements.medicine_id', $medicineId);
+        }
+        if ($outletId) {
+            $query->where('stock_movements.outlet_id', $outletId);
         }
         if ($kategori) {
             $query->where('obats.kategori', $kategori);
@@ -187,6 +194,8 @@ class StockMovementController extends Controller implements HasMiddleware
             }
         }
 
+        $outlets = DB::table('outlets')->where('is_active', true)->whereNull('deleted_at')->get(['id', 'name', 'code']);
+
         return Inertia::render('Inventory/Movements', [
             'movements' => $movements,
             'summary' => [
@@ -199,11 +208,13 @@ class StockMovementController extends Controller implements HasMiddleware
             'categories' => $categories,
             'suppliers' => $suppliers,
             'users' => $users,
+            'outlets' => $outlets,
             'selectedMedicineDetail' => $selectedMedicineDetail,
             'filters' => [
                 'date_preset' => $datePreset,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
+                'outlet_id' => $outletId,
                 'medicine_id' => $medicineId,
                 'kategori' => $kategori,
                 'warehouse_name' => $warehouseName,

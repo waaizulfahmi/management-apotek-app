@@ -31,7 +31,7 @@ class CustomerController extends Controller
         $request->validate([
             'code' => 'required|unique:customers,code',
             'name' => 'required|string|max:150',
-            'phone' => 'required|string',
+            'phone' => 'required|string|max:30|unique:customers,phone',
         ]);
 
         DB::table('customers')->insert([

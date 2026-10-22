@@ -17,6 +17,8 @@ use Exception;
 
 class PurchaseInvoiceTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected User $user;
     protected Supplier $supplier;
     protected Outlet $outlet;
@@ -277,8 +279,8 @@ class PurchaseInvoiceTest extends TestCase
         $this->assertNotNull($b2);
         $this->assertEquals(10, (float)$b1->stock);
         $this->assertEquals(15, (float)$b2->stock);
-        $this->assertEquals('2028-06-30', $b1->expired_date);
-        $this->assertEquals('2028-12-31', $b2->expired_date);
+        $this->assertStringStartsWith('2028-06-30', (string)$b1->expired_date);
+        $this->assertStringStartsWith('2028-12-31', (string)$b2->expired_date);
     }
 
     /**
@@ -607,5 +609,40 @@ class PurchaseInvoiceTest extends TestCase
         // Coba buat faktur kedua dengan supplier yang sama dan nomor faktur yang sama
         $this->expectException(Exception::class);
         $this->service->saveInvoice($header, $items, null, $this->user);
+    }
+
+    /**
+     * 12. Halaman buat faktur dari PO (prefilled PO) berhasil dimuat tanpa error obats.barcode
+     */
+    public function test_create_invoice_page_with_prefilled_po_loads_successfully()
+    {
+        $poId = DB::table('purchase_orders')->insertGetId([
+            'po_number' => 'PO-TEST-' . rand(1000, 9999),
+            'supplier_id' => $this->supplier->id,
+            'outlet_id' => $this->outlet->id,
+            'created_by' => $this->user->id,
+            'order_date' => now()->toDateString(),
+            'status' => 'APPROVED',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('purchase_order_items')->insert([
+            'purchase_order_id' => $poId,
+            'medicine_id' => $this->medicineA->kode,
+            'order_quantity' => 10,
+            'unit_price' => 7000,
+            'subtotal' => 70000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('purchases.invoices.create', ['po_id' => $poId]));
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->component('Purchases/Invoices/Create')
+            ->has('prefilled_po')
+            ->where('prefilled_po.id', $poId)
+        );
     }
 }

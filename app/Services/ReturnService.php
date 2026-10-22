@@ -29,6 +29,7 @@ class ReturnService
                 'return_number' => $returnNumber,
                 'type' => $type,
                 'reference_id' => $referenceId,
+                'outlet_id' => $refModel->outlet_id ?? \App\Services\OutletService::getActiveOutletId(),
                 'customer_id' => $type === 'sale' ? $refModel->customer_id : null,
                 'supplier_id' => $type === 'purchase' ? $refModel->supplier_id : null,
                 'user_id' => $userId,
@@ -88,10 +89,12 @@ class ReturnService
     }
 
     /**
-     * Process Sales Return (Restock if Good condition, adjust finance)
+     * Process Sales Return (Restock if Good condition, adjust finance & loyalty points)
      */
     private function processSaleReturn(ProductReturn $productReturn, int $userId)
     {
+        $outletId = $productReturn->outlet_id ?: ($productReturn->sale ? $productReturn->sale->outlet_id : null);
+
         foreach ($productReturn->items as $item) {
             $medicine = Obat::where('kode', $item->medicine_id)->first();
             
@@ -102,16 +105,25 @@ class ReturnService
                     if ($batch) {
                         $stockBefore = $batch->stock;
                         $batch->increment('stock', $item->quantity);
-                        $this->logStockMovement($item, 'in', 'RETUR PENJUALAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId);
+                        $this->logStockMovement($item, 'in', 'RETUR PENJUALAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId, $outletId);
                     }
                 }
                 $medicine->increment('stok', $item->quantity);
+
+                // Update outlet stock in product_stocks table
+                if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+                    $pStock = \App\Models\ProductStock::firstOrCreate(
+                        ['obat_id' => $item->medicine_id, 'outlet_id' => $outletId],
+                        ['stock' => 0, 'min_stock' => 5]
+                    );
+                    $pStock->increment('stock', $item->quantity);
+                }
             } else {
-                // Return to Damaged/Retur Stock pool (assuming we have a damaged stock mechanism or just log it)
-                // For simplicity, we just log it as damaged without putting it into active stock
-                $this->logStockMovement($item, 'in', 'RETUR (RUSAK)', $productReturn->return_number, 0, 0, $userId);
+                // Log damaged stock movement without adding to sellable inventory
+                $this->logStockMovement($item, 'in', 'RETUR (RUSAK)', $productReturn->return_number, 0, 0, $userId, $outletId);
             }
         }
+
         // Process Finance (Refunds) & Update Shift Metrics
         if ($productReturn->refund_amount > 0 && $productReturn->refund_method === 'Cash') {
             $this->processRefundFinance($productReturn, 'sale', $userId);
@@ -120,6 +132,23 @@ class ReturnService
         if ($productReturn->sale && $productReturn->sale->shift_id) {
             app(ShiftService::class)->recalculateShiftMetrics($productReturn->sale->shift_id);
         }
+
+        // Reverse loyalty points for returned sale if applicable
+        if ($productReturn->customer_id && $productReturn->total_amount > 0) {
+            $customer = Customer::find($productReturn->customer_id);
+            if ($customer) {
+                $pointService = app(PointService::class);
+                $pointsToReverse = $pointService->calculatePotentialPoints($customer, (float)$productReturn->total_amount);
+                if ($pointsToReverse > 0) {
+                    $pointService->reversePoints(
+                        $customer,
+                        $pointsToReverse,
+                        "Pembatalan/Retur Transaksi Retur #{$productReturn->return_number}",
+                        $productReturn->return_number
+                    );
+                }
+            }
+        }
     }
 
     /**
@@ -127,6 +156,8 @@ class ReturnService
      */
     private function processPurchaseReturn(ProductReturn $productReturn, int $userId)
     {
+        $outletId = $productReturn->outlet_id ?: ($productReturn->purchase ? $productReturn->purchase->outlet_id : null);
+
         foreach ($productReturn->items as $item) {
             $medicine = Obat::where('kode', $item->medicine_id)->first();
             
@@ -138,10 +169,20 @@ class ReturnService
                         throw new Exception("Stok untuk batch ini tidak mencukupi untuk diretur.");
                     }
                     $batch->decrement('stock', $item->quantity);
-                    $this->logStockMovement($item, 'out', 'RETUR PEMBELIAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId);
+                    $this->logStockMovement($item, 'out', 'RETUR PEMBELIAN', $productReturn->return_number, $stockBefore, $batch->stock, $userId, $outletId);
                 }
             }
             $medicine->decrement('stok', $item->quantity);
+
+            // Deduct from outlet stock
+            if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+                $pStock = \App\Models\ProductStock::where('obat_id', $item->medicine_id)
+                    ->where('outlet_id', $outletId)
+                    ->first();
+                if ($pStock) {
+                    $pStock->decrement('stock', $item->quantity);
+                }
+            }
         }
 
         // Process Finance (Refunds / Receivables)
@@ -204,12 +245,13 @@ class ReturnService
     /**
      * Helper to log stock movement
      */
-    private function logStockMovement($item, $type, $movementType, $refNo, $before, $after, $userId)
+    private function logStockMovement($item, $type, $movementType, $refNo, $before, $after, $userId, ?int $outletId = null)
     {
         $smNo = 'SM-' . date('Ymd') . '-' . rand(10000, 99999);
         
         DB::table('stock_movements')->insert([
             'movement_number' => $smNo,
+            'outlet_id' => $outletId,
             'medicine_id' => $item->medicine_id,
             'batch_id' => $item->batch_id,
             'batch_number' => $item->batch->batch_number ?? 'BATCH-SYS',
@@ -250,20 +292,21 @@ class ReturnService
     private function validateReturnQuantity(string $type, int $referenceId, string $medicineId, int $requestQty)
     {
         if ($type === 'sale') {
-            $item = \App\Models\SaleItem::where('sale_id', $referenceId)
+            $boughtQty = (int) \App\Models\SaleItem::where('sale_id', $referenceId)
                 ->where('medicine_id', $medicineId)
-                ->first();
+                ->sum('quantity');
         } else {
-            $item = \App\Models\PurchaseItem::where('purchase_id', $referenceId)
+            $pItems = \App\Models\PurchaseItem::where('purchase_id', $referenceId)
                 ->where('medicine_id', $medicineId)
-                ->first();
+                ->get();
+            $receivedSum = $pItems->sum('quantity_received');
+            $orderedSum = $pItems->sum('quantity_ordered');
+            $boughtQty = (int) ($receivedSum > 0 ? $receivedSum : $orderedSum);
         }
 
-        if (!$item) {
+        if ($boughtQty <= 0) {
             throw new Exception("Barang tidak ditemukan dalam transaksi asli.");
         }
-
-        $boughtQty = $type === 'sale' ? $item->quantity : $item->quantity_ordered;
         
         $alreadyReturned = ProductReturnItem::whereHas('productReturn', function ($q) use ($referenceId, $type) {
                 $q->where('reference_id', $referenceId)

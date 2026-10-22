@@ -213,7 +213,7 @@ class PurchaseInvoiceService
                 $purchase->update($purchaseData);
                 $purchase->items()->delete();
             } else {
-                $purchaseData['po_number'] = $headerData['po_number'] ?? ('PO-' . date('Ymd') . '-' . rand(100, 999));
+                $purchaseData['po_number'] = $headerData['po_number'] ?? ('PO-' . date('YmdHis') . '-' . rand(1000, 9999));
                 $purchase = Purchase::create($purchaseData);
             }
 

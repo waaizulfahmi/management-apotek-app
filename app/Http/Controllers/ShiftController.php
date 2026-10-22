@@ -89,13 +89,18 @@ class ShiftController extends Controller
             'master_shift_id' => 'nullable|exists:master_shifts,id',
         ]);
 
+        $user = auth()->user();
         $outletId = $request->filled('outlet_id') 
             ? (int)$request->outlet_id 
-            : (auth()->user()->outlet_id ?: \App\Services\OutletService::getActiveOutletId(auth()->user()));
+            : ($user->outlet_id ?: \App\Services\OutletService::getActiveOutletId($user));
+
+        if ($outletId && !\App\Services\OutletService::userCanAccessOutlet($user, $outletId)) {
+            return back()->with('error', 'Akses ditolak. Anda tidak memiliki izin untuk membuka shift pada outlet ini.');
+        }
 
         try {
             $shift = $this->shiftService->openShift(
-                auth()->id(),
+                $user->id,
                 $outletId,
                 $request->shift_name,
                 $request->opening_cash,

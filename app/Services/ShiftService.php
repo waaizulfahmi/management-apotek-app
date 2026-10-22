@@ -35,6 +35,14 @@ class ShiftService
                 throw new Exception("Kasir masih memiliki Shift Aktif ({$activeShift->shift_name} - dibuka pada {$activeShift->opened_at->format('d/m/Y H:i')}). Silakan tutup shift terlebih dahulu.");
             }
 
+            // Check if outlet is accessible by user
+            if ($outletId) {
+                $user = \App\Models\User::find($userId);
+                if (!OutletService::userCanAccessOutlet($user, $outletId)) {
+                    throw new Exception("Akses ditolak. Kasir tidak memiliki hak akses ke outlet yang dipilih.");
+                }
+            }
+
             $isOutOfSchedule = false;
             if ($masterShiftId) {
                 $masterShift = \App\Models\MasterShift::find($masterShiftId);

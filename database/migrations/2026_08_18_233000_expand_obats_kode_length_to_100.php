@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
 
         // Expand obats.kode to varchar(100)
@@ -60,6 +64,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         DB::statement("ALTER TABLE obats MODIFY kode VARCHAR(10) NOT NULL;");
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');

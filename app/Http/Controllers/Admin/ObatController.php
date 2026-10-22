@@ -98,7 +98,7 @@ class ObatController extends Controller
         }
 
         $request->validate([
-            'kode' => 'required|unique:obats,kode|max:10',
+            'kode' => 'required|unique:obats,kode|max:100',
             'nama' => 'required|max:100',
             'gambar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
             'jenis_obat' => 'required',

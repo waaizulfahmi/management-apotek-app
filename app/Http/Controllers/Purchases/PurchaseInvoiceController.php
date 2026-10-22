@@ -128,7 +128,7 @@ class PurchaseInvoiceController extends Controller
                 $poItems = DB::table('purchase_order_items')
                     ->join('obats', 'purchase_order_items.medicine_id', '=', 'obats.kode')
                     ->where('purchase_order_items.purchase_order_id', $poId)
-                    ->select('purchase_order_items.*', 'obats.nama as medicine_name', 'obats.kode as medicine_code', 'obats.barcode')
+                    ->select('purchase_order_items.*', 'obats.nama as medicine_name', 'obats.kode as medicine_code', 'obats.kode as barcode')
                     ->get();
 
                 $prefilledPo = [
@@ -364,27 +364,56 @@ class PurchaseInvoiceController extends Controller
     }
 
     /**
-     * Helper untuk mengambil seluruh obat beserta data konversi satuannya
+     * Helper untuk mengambil seluruh obat beserta data konversi satuannya (Eager Loaded & High Performance)
      */
     protected function getMedicinesWithConversion()
     {
-        $medicines = Obat::with(['satuanDasar', 'satuanPembelian'])->get();
+        $medicines = Obat::with([
+            'satuanDasar',
+            'satuanPembelian',
+            'productUnits.unit',
+            'prices'
+        ])->get();
 
         return $medicines->map(function ($med) {
-            $priceData = $this->conversionService->getCalculatedPrices($med->kode);
-            $units = $priceData['unit_prices'] ?? [];
+            $masterHarga = (float) ($med->harga ?? 0);
+            $hargaBeliDefault = (float)$med->harga_beli ?: ($masterHarga * 0.8);
+            $units = [];
+
+            if ($med->productUnits && $med->productUnits->isNotEmpty()) {
+                foreach ($med->productUnits as $pu) {
+                    $unitId = $pu->unit_id;
+                    $unitName = $pu->unit ? $pu->unit->name : 'Satuan';
+                    $factor = (float) ($pu->conversion_factor > 0 ? $pu->conversion_factor : 1.0);
+
+                    $customPurchase = $med->prices ? $med->prices->where('unit_id', $unitId)->where('price_type', 'PURCHASE')->first() : null;
+                    $calcPurchase = $customPurchase ? (float)$customPurchase->price : ($hargaBeliDefault * $factor);
+
+                    $units[] = [
+                        'unit_id' => $unitId,
+                        'unit_name' => $unitName,
+                        'is_base_unit' => (bool)$pu->is_base_unit,
+                        'is_purchase_unit' => ($med->satuan_pembelian_id == $unitId || $pu->is_purchase_unit),
+                        'is_selling_unit' => (bool)$pu->is_selling_unit,
+                        'conversion_factor' => $factor,
+                        'purchase_price' => round($calcPurchase, 2),
+                        'purchase_price_formatted' => 'Rp ' . number_format($calcPurchase, 0, ',', '.') . ' / ' . $unitName,
+                    ];
+                }
+            }
 
             // Jika obat belum punya settingan product_units, buat unit default berdasarkan satuan dasarnya
             if (empty($units)) {
+                $baseUnitName = $med->satuanDasar ? $med->satuanDasar->name : ($med->jenis_obat ?: 'Unit');
                 $units = [
                     [
                         'unit_id' => $med->satuan_dasar_id,
-                        'unit_name' => $med->satuanDasar ? $med->satuanDasar->name : ($med->jenis_obat ?: 'Unit'),
+                        'unit_name' => $baseUnitName,
                         'is_base_unit' => true,
                         'is_purchase_unit' => true,
                         'conversion_factor' => 1.0,
-                        'purchase_price' => (float)$med->harga_beli ?: (float)$med->harga * 0.8,
-                        'purchase_price_formatted' => 'Rp ' . number_format((float)$med->harga_beli ?: (float)$med->harga * 0.8, 0, ',', '.'),
+                        'purchase_price' => round($hargaBeliDefault, 2),
+                        'purchase_price_formatted' => 'Rp ' . number_format($hargaBeliDefault, 0, ',', '.') . ' / ' . $baseUnitName,
                     ]
                 ];
             }
@@ -392,13 +421,13 @@ class PurchaseInvoiceController extends Controller
             return [
                 'kode' => $med->kode,
                 'nama' => $med->nama,
-                'barcode' => $med->barcode,
+                'barcode' => $med->kode,
                 'kategori' => $med->kategori,
                 'stok' => (float)$med->stok,
                 'satuan_dasar_id' => $med->satuan_dasar_id,
                 'satuan_dasar_name' => $med->satuanDasar ? $med->satuanDasar->name : ($med->jenis_obat ?: 'Unit'),
                 'satuan_pembelian_id' => $med->satuan_pembelian_id,
-                'harga_beli' => (float)$med->harga_beli ?: (float)$med->harga * 0.8,
+                'harga_beli' => round($hargaBeliDefault, 2),
                 'units' => $units,
             ];
         });

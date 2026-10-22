@@ -134,7 +134,9 @@ class UnitConversionService
             return [];
         }
 
-        $this->recalculateProductUnitFactors($productId);
+        if (ProductUnit::where('product_id', $productId)->doesntExist()) {
+            $this->recalculateProductUnitFactors($productId);
+        }
 
         $productUnits = ProductUnit::with('unit')
             ->where('product_id', $productId)

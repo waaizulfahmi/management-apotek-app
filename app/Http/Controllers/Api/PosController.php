@@ -216,6 +216,27 @@ class PosController extends Controller
             'paid_amount' => 'required|numeric|min:0',
         ]);
 
+        $idempotencyKey = $request->header('X-Idempotency-Key') ?: $request->input('client_tx_id');
+        if ($idempotencyKey) {
+            $existingInvoice = \Illuminate\Support\Facades\Cache::get('pos_idempotency_' . $idempotencyKey);
+            if ($existingInvoice) {
+                $sale = DB::table('sales')->where('invoice_number', $existingInvoice)->first();
+                if ($sale) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Transaksi POS Berhasil Diproses! (Idempotent)',
+                        'data' => [
+                            'sale_id' => $sale->id,
+                            'invoice_number' => $sale->invoice_number,
+                            'grand_total' => $sale->grand_total,
+                            'paid_amount' => $sale->paid_amount,
+                            'change_amount' => $sale->change_amount,
+                        ]
+                    ]);
+                }
+            }
+        }
+
         $conversionService = app(\App\Services\UnitConversionService::class);
 
         DB::beginTransaction();
@@ -244,19 +265,32 @@ class PosController extends Controller
                 $txQty = (int)$item['quantity'];
                 $unitId = isset($item['unit_id']) ? (int)$item['unit_id'] : null;
 
-                $unitName = null;
-                $conversionFactor = 1.0000;
-                $sellingUnitPrice = (float)($item['unit_price'] ?? $item['harga'] ?? 0);
-                if ($sellingUnitPrice <= 0) {
-                    $dbHarga = DB::table('obats')->where('kode', $medKode)->value('harga');
-                    $sellingUnitPrice = (float)($dbHarga ?? 0);
+                // Validate product is active and attached to this outlet
+                if (!\App\Services\OutletService::isProductAvailableInOutlet($medKode, $outletId)) {
+                    $medName = DB::table('obats')->where('kode', $medKode)->value('nama') ?? $medKode;
+                    throw new Exception("Produk '{$medName}' ({$medKode}) tidak terdaftar atau tidak aktif di outlet ini.");
                 }
 
+                $unitName = null;
+                $conversionFactor = 1.0000;
+
+                // Prevent price manipulation: resolve price strictly from backend
+                $backendPrice = \App\Services\OutletService::getOutletPrice($medKode, $outletId);
                 if ($unitId) {
                     $uObj = \App\Models\Unit::find($unitId);
                     if ($uObj) $unitName = $uObj->name;
                     $conversionFactor = $conversionService->getConversionFactor($medKode, $unitId);
+
+                    $unitPriceRecord = DB::table('product_prices')
+                        ->where('product_id', $medKode)
+                        ->where('unit_id', $unitId)
+                        ->where('price_type', 'SELLING')
+                        ->value('price');
+                    if ($unitPriceRecord && (float)$unitPriceRecord > 0) {
+                        $backendPrice = (float)$unitPriceRecord;
+                    }
                 }
+                $sellingUnitPrice = $backendPrice;
 
                 // Total base stock to deduct from FEFO batches
                 $baseQtyNeeded = (int)ceil($txQty * $conversionFactor);
@@ -274,31 +308,51 @@ class PosController extends Controller
                     $outletId
                 );
 
-                // Line subtotal based on POS transaction unit price
-                $lineSubtotal = $txQty * $sellingUnitPrice;
+                // Line subtotal based on backend verified unit price
+                $lineSubtotal = round($txQty * $sellingUnitPrice, 2);
                 $subtotal += $lineSubtotal;
 
-                foreach ($allocatedBatches as $allocated) {
+                $totalBatches = count($allocatedBatches);
+                $accumulatedSubtotal = 0;
+                $accumulatedQty = 0;
+
+                foreach ($allocatedBatches as $idx => $allocated) {
+                    $batchBaseQty = (float)$allocated['quantity'];
+                    $batchTxQty = $conversionFactor > 0 ? round($batchBaseQty / $conversionFactor, 4) : $batchBaseQty;
+
+                    if ($idx === $totalBatches - 1) {
+                        $itemBatchQty = max(1, $txQty - $accumulatedQty);
+                        $itemBatchSubtotal = max(0, round($lineSubtotal - $accumulatedSubtotal, 2));
+                    } else {
+                        $itemBatchQty = (int)round($batchTxQty);
+                        $itemBatchSubtotal = round($itemBatchQty * $sellingUnitPrice, 2);
+                        $accumulatedQty += $itemBatchQty;
+                        $accumulatedSubtotal += $itemBatchSubtotal;
+                    }
+
                     $itemsToInsert[] = [
                         'medicine_id' => $medKode,
                         'batch_id' => $allocated['batch_id'],
-                        'quantity' => $txQty,
+                        'quantity' => $itemBatchQty,
                         'unit_id' => $unitId,
                         'unit_name' => $unitName,
                         'conversion_to_base' => $conversionFactor,
-                        'quantity_base' => $baseQtyNeeded,
+                        'quantity_base' => $batchBaseQty,
                         'buy_price' => $allocated['buy_price'],
                         'unit_price' => $sellingUnitPrice,
                         'discount' => 0,
-                        'subtotal' => $lineSubtotal,
+                        'subtotal' => $itemBatchSubtotal,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ];
                 }
             }
 
-            $discount = $request->discount ?? 0;
-            $tax = $request->tax ?? 0;
+            $discount = (float)($request->discount ?? 0);
+            if ($discount > 0 && !auth()->user()->can('pos.discount') && !in_array(auth()->user()->role, ['admin', 'owner'])) {
+                throw new Exception("Anda tidak memiliki izin untuk memberikan diskon transaksi.");
+            }
+            $tax = (float)($request->tax ?? 0);
             $grandTotal = ($subtotal - $discount) + $tax;
 
             if ($request->paid_amount < $grandTotal) {
@@ -383,6 +437,10 @@ class PosController extends Controller
             ]);
 
             DB::commit();
+
+            if ($idempotencyKey) {
+                \Illuminate\Support\Facades\Cache::put('pos_idempotency_' . $idempotencyKey, $invoiceNumber, 60);
+            }
 
             return response()->json([
                 'success' => true,

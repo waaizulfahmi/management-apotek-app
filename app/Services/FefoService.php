@@ -70,6 +70,18 @@ class FefoService
             throw new Exception("Stok obat {$medicine->nama} tidak mencukupi. Dibutuhkan: {$qtyNeeded}, Tersedia: {$totalAvailableStock}");
         }
 
+        // Validate outlet-specific stock if outlet context is provided
+        if ($outletId && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+            $pStock = DB::table('product_stocks')
+                ->where('obat_id', $medicineKode)
+                ->where('outlet_id', $outletId)
+                ->first();
+            $outletStock = $pStock ? (float)$pStock->stock : 0;
+            if ($outletStock < $qtyNeeded) {
+                throw new Exception("Stok obat {$medicine->nama} di outlet tidak mencukupi. Tersedia: {$outletStock}, Dibutuhkan: {$qtyNeeded}");
+            }
+        }
+
         $allocatedBatches = [];
         $remainingQty = $qtyNeeded;
 

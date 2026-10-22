@@ -68,10 +68,12 @@ class StockOpnameManualController extends Controller
             $prefix = 'SO-' . $date . '-';
 
             // Get the highest existing SO number with today's date prefix
-            $lastToday = StockOpname::withTrashed()
-                ->where('opname_number', 'like', $prefix . '%')
-                ->orderByRaw("CAST(SUBSTRING_INDEX(opname_number, '-', -1) AS UNSIGNED) DESC")
-                ->first();
+            $query = StockOpname::withTrashed()->where('opname_number', 'like', $prefix . '%');
+            if (DB::getDriverName() === 'sqlite') {
+                $lastToday = $query->orderBy('id', 'desc')->first();
+            } else {
+                $lastToday = $query->orderByRaw("CAST(SUBSTRING_INDEX(opname_number, '-', -1) AS UNSIGNED) DESC")->first();
+            }
 
             $nextNum = 1;
             if ($lastToday) {
@@ -330,26 +332,29 @@ class StockOpnameManualController extends Controller
                 }
 
                 // ─────────────────────────────────────────────────────────────
-                // UPDATE STOK OBAT BERDASARKAN HASIL OPNAME
+                // UPDATE STOK OBAT & OUTLET BERDASARKAN HASIL OPNAME
                 // ─────────────────────────────────────────────────────────────
+                if ($opname->outlet_id && \Illuminate\Support\Facades\Schema::hasTable('product_stocks')) {
+                    \App\Models\ProductStock::updateOrCreate(
+                        ['obat_id' => $item->medicine_id, 'outlet_id' => $opname->outlet_id],
+                        ['stock' => $physical]
+                    );
+                }
+
+                $isMainOutlet = \App\Models\Outlet::where('id', $opname->outlet_id)->where('is_main', true)->exists();
+                if (!$opname->outlet_id || $isMainOutlet) {
+                    Obat::where('kode', $item->medicine_id)->update(['stok' => $physical]);
+                } else {
+                    $totalAcrossOutlets = \App\Models\ProductStock::where('obat_id', $item->medicine_id)->sum('stock');
+                    Obat::where('kode', $item->medicine_id)->update(['stok' => $totalAcrossOutlets]);
+                }
+
                 if ($item->batch_id) {
-                    // === Mode Per-Batch: update stok batch spesifik ===
                     $batch = MedicineBatch::find($item->batch_id);
                     if ($batch) {
                         $batch->update(['stock' => $physical]);
                     }
-                    // Recalculate total stok obat dari semua batch aktif
-                    $totalMedStock = MedicineBatch::where('medicine_id', $item->medicine_id)
-                        ->where('is_active', true)
-                        ->sum('stock');
-                    Obat::where('kode', $item->medicine_id)->update(['stok' => $totalMedStock]);
-
                 } else {
-                    // === Mode Master (tanpa batch): langsung set stok obat ===
-                    Obat::where('kode', $item->medicine_id)->update(['stok' => $physical]);
-
-                    // Jika obat ini punya batch aktif, proporsikan stok batch
-                    // agar total batch == physical (mencegah desync)
                     $activeBatches = MedicineBatch::where('medicine_id', $item->medicine_id)
                         ->where('is_active', true)
                         ->orderBy('id', 'asc')
@@ -361,15 +366,9 @@ class StockOpnameManualController extends Controller
 
                         foreach ($activeBatches as $idx => $ab) {
                             if ($idx === $activeBatches->count() - 1) {
-                                // Sisa stok masuk ke batch terakhir
                                 $ab->update(['stock' => max(0, $remaining)]);
                             } else {
-                                // Proporsional berdasarkan stok lama
-                                if ($oldTotal > 0) {
-                                    $portion = (int) round(($ab->stock / $oldTotal) * $physical);
-                                } else {
-                                    $portion = 0;
-                                }
+                                $portion = $oldTotal > 0 ? (int) round(($ab->stock / $oldTotal) * $physical) : 0;
                                 $ab->update(['stock' => max(0, $portion)]);
                                 $remaining -= max(0, $portion);
                             }
@@ -378,7 +377,7 @@ class StockOpnameManualController extends Controller
                 }
 
                 // ─────────────────────────────────────────────────────────────
-                // CATAT KARTU STOK (STOCK MOVEMENT) — semua item counted
+                // CATAT KARTU STOK (STOCK MOVEMENT) DENGAN OUTLET_ID
                 // ─────────────────────────────────────────────────────────────
                 $reasonStr = $item->reason ?: 'Penyesuaian Stok Opname';
                 $movNum = 'SM-SO-' . now()->format('YmdHis') . '-' . $item->id;
@@ -387,6 +386,7 @@ class StockOpnameManualController extends Controller
                     // SURPLUS: stok fisik lebih dari sistem → catat sebagai MASUK (+)
                     DB::table('stock_movements')->insert([
                         'movement_number'  => $movNum,
+                        'outlet_id'        => $opname->outlet_id,
                         'medicine_id'      => $item->medicine_id,
                         'batch_id'         => $item->batch_id,
                         'type'             => 'in',
@@ -407,6 +407,7 @@ class StockOpnameManualController extends Controller
                     // DEFICIT: stok fisik kurang dari sistem → catat sebagai KELUAR (-)
                     DB::table('stock_movements')->insert([
                         'movement_number'  => $movNum,
+                        'outlet_id'        => $opname->outlet_id,
                         'medicine_id'      => $item->medicine_id,
                         'batch_id'         => $item->batch_id,
                         'type'             => 'out',
@@ -419,14 +420,14 @@ class StockOpnameManualController extends Controller
                         'unit_cost'        => $item->unit_price ?? 0,
                         'user_id'          => $userId,
                         'status'           => 'POSTED',
-                        'notes'            => "FINAL SO | Defisit {$diff} | {$reasonStr}",
+                        'notes'            => "FINAL SO | Defisit -{$diff} | {$reasonStr}",
                         'created_at'       => now(),
-                        'updated_at'       => now(),
                     ]);
                 } else {
                     // MATCH: selisih nol → catat sebagai audit/konfirmasi stok (in=0, type=in)
                     DB::table('stock_movements')->insert([
                         'movement_number'  => $movNum,
+                        'outlet_id'        => $opname->outlet_id,
                         'medicine_id'      => $item->medicine_id,
                         'batch_id'         => $item->batch_id,
                         'type'             => 'in',

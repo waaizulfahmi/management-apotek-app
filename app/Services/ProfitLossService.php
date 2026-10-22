@@ -145,7 +145,7 @@ class ProfitLossService
         $totalDiscount = (float)(clone $salesQuery)->sum('discount');
         $grandTotalSum = (float)(clone $salesQuery)->sum('grand_total');
         $subtotalSum = (float)(clone $salesQuery)->sum('subtotal');
-        $grossSales = $subtotalSum > 0 ? ($subtotalSum + $totalDiscount) : ($grandTotalSum + $totalDiscount);
+        $grossSales = $subtotalSum > 0 ? $subtotalSum : ($grandTotalSum + $totalDiscount);
 
         // 2. Sales Returns Query
         $returnsQuery = DB::table('product_returns')

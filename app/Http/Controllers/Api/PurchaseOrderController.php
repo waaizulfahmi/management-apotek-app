@@ -127,15 +127,11 @@ class PurchaseOrderController extends Controller
      */
     public function create()
     {
-        $conversionService = app(\App\Services\UnitConversionService::class);
-        $suppliers = DB::table('suppliers')->where('is_active', true)->get();
-        $medicines = DB::table('obats')->get();
-
-        foreach ($medicines as $m) {
-            $priceData = $conversionService->getCalculatedPrices($m->kode);
-            $m->units = $priceData['unit_prices'] ?? [];
-            $m->satuan_pembelian_id = $m->satuan_pembelian_id;
-        }
+        $suppliers = DB::table('suppliers')->where('is_active', true)->orderBy('name')->get();
+        $medicines = DB::table('obats')
+            ->select('kode', 'nama', 'jenis_obat', 'kategori', 'stok', 'satuan_pembelian_id')
+            ->orderBy('nama')
+            ->get();
 
         return Inertia::render('Purchases/PO/Create', [
             'suppliers' => $suppliers,
@@ -155,9 +151,8 @@ class PurchaseOrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.medicine_id' => 'required|exists:obats,kode',
             'items.*.order_quantity' => 'required|integer|min:1',
-            'items.*.unit_price' => 'required|numeric|min:0',
             'items.*.unit_id' => 'nullable|exists:units,id',
-            'items.*.update_master_price' => 'nullable|boolean',
+            'items.*.unit_price' => 'nullable|numeric|min:0',
         ]);
 
         $conversionService = app(\App\Services\UnitConversionService::class);
@@ -167,19 +162,9 @@ class PurchaseOrderController extends Controller
             $poNumber = 'PO-PBF-' . date('Ymd') . '-' . str_pad(DB::table('purchase_orders')->whereDate('created_at', now()->toDateString())->count() + 1, 4, '0', STR_PAD_LEFT);
             $userId = auth()->id();
 
-            $subtotal = 0;
-            foreach ($request->items as $item) {
-                $itemSubtotal = ($item['order_quantity'] * $item['unit_price']) - ($item['discount_amount'] ?? 0);
-                $subtotal += $itemSubtotal;
-            }
-
-            $discountAmount = $request->discount_amount ?? 0;
-            $taxableAmount = $subtotal - $discountAmount;
-            $taxAmount = ($taxableAmount * ($request->tax_percent ?? 11)) / 100;
-            $grandTotal = $taxableAmount + $taxAmount + ($request->shipping_cost ?? 0);
-
-            // Approval threshold check (< 5 Juta Auto-Approved)
-            $status = $grandTotal >= 5000000 ? 'WAITING_APPROVAL' : 'APPROVED';
+            // Sesuai aturan pengadaan apotek: PO hanya untuk pemesanan kuantitas (SP),
+            // harga tidak perlu diinput karena dapat berubah sewaktu-waktu dan dicatat resmi di Faktur.
+            $status = 'APPROVED';
 
             $poId = DB::table('purchase_orders')->insertGetId([
                 'po_number' => $poNumber,
@@ -190,18 +175,18 @@ class PurchaseOrderController extends Controller
                 'payment_term_days' => $request->payment_term_days ?? 30,
                 'due_date' => Carbon::parse($request->order_date)->addDays($request->payment_term_days ?? 30)->toDateString(),
                 'status' => $status,
-                'subtotal' => $subtotal,
-                'discount_percent' => $request->discount_percent ?? 0,
-                'discount_amount' => $discountAmount,
-                'tax_percent' => $request->tax_percent ?? 11,
-                'tax_amount' => $taxAmount,
-                'shipping_cost' => $request->shipping_cost ?? 0,
-                'grand_total' => $grandTotal,
+                'subtotal' => 0,
+                'discount_percent' => 0,
+                'discount_amount' => 0,
+                'tax_percent' => 0,
+                'tax_amount' => 0,
+                'shipping_cost' => 0,
+                'grand_total' => 0,
                 'notes_supplier' => $request->notes_supplier,
                 'notes_internal' => $request->notes_internal,
                 'created_by' => $userId,
-                'approved_by' => $status === 'APPROVED' ? $userId : null,
-                'approved_at' => $status === 'APPROVED' ? now() : null,
+                'approved_by' => $userId,
+                'approved_at' => now(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -219,7 +204,6 @@ class PurchaseOrderController extends Controller
                 }
 
                 $qtyBase = (int)ceil($item['order_quantity'] * $conversionFactor);
-                $itemSubtotal = ($item['order_quantity'] * $item['unit_price']) - ($item['discount_amount'] ?? 0);
 
                 DB::table('purchase_order_items')->insert([
                     'purchase_order_id' => $poId,
@@ -230,53 +214,16 @@ class PurchaseOrderController extends Controller
                     'quantity_base' => $qtyBase,
                     'order_quantity' => $item['order_quantity'],
                     'bonus_quantity' => $item['bonus_quantity'] ?? 0,
-                    'unit_price' => $item['unit_price'],
-                    'discount_percent' => $item['discount_percent'] ?? 0,
-                    'discount_amount' => $item['discount_amount'] ?? 0,
-                    'subtotal' => $itemSubtotal,
+                    'unit_price' => 0,
+                    'discount_percent' => 0,
+                    'discount_amount' => 0,
+                    'subtotal' => 0,
                     'received_quantity' => 0,
                     'outstanding_quantity' => $item['order_quantity'],
                     'notes' => $item['notes'] ?? null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-
-                // Track supplier price history
-                DB::table('supplier_price_histories')->insert([
-                    'supplier_id' => $request->supplier_id,
-                    'medicine_id' => $medKode,
-                    'price' => $item['unit_price'],
-                    'transaction_date' => $request->order_date,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // If user toggled option to update master purchase price
-                if (!empty($item['update_master_price']) && $unitId) {
-                    $oldPriceRecord = \App\Models\ProductPrice::where('product_id', $medKode)
-                        ->where('unit_id', $unitId)
-                        ->where('price_type', 'PURCHASE')
-                        ->first();
-
-                    $oldP = $oldPriceRecord ? (float)$oldPriceRecord->price : 0.00;
-                    $newP = (float)$item['unit_price'];
-
-                    \App\Models\ProductPrice::updateOrCreate(
-                        ['product_id' => $medKode, 'unit_id' => $unitId, 'price_type' => 'PURCHASE'],
-                        ['price' => $newP, 'updated_by' => $userId, 'created_by' => $userId]
-                    );
-
-                    if ($oldP != $newP) {
-                        \App\Models\PriceHistory::create([
-                            'product_id' => $medKode,
-                            'unit_id' => $unitId,
-                            'price_type' => 'PURCHASE',
-                            'old_price' => $oldP,
-                            'new_price' => $newP,
-                            'user_id' => $userId,
-                        ]);
-                    }
-                }
             }
 
             // Audit Log
@@ -285,7 +232,7 @@ class PurchaseOrderController extends Controller
                 'action' => 'CREATE_PURCHASE_ORDER',
                 'module' => 'PurchaseOrder',
                 'record_id' => $poNumber,
-                'new_values' => json_encode(['grand_total' => $grandTotal, 'status' => $status]),
+                'new_values' => json_encode(['total_items' => count($request->items), 'status' => $status]),
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'created_at' => now(),
@@ -294,7 +241,7 @@ class PurchaseOrderController extends Controller
 
             DB::commit();
 
-            return redirect()->route('purchases.po.index')->with('success', "Purchase Order {$poNumber} berhasil dibuat dengan status {$status}!");
+            return redirect()->route('purchases.po.index')->with('success', "Surat Pesanan {$poNumber} berhasil dibuat!");
         } catch (Exception $e) {
             DB::rollBack();
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
@@ -302,167 +249,21 @@ class PurchaseOrderController extends Controller
     }
 
     /**
-     * Goods Receipt Form
+     * Goods Receipt Form - Dialihkan ke Faktur Pembelian Farmasi (Single Source of Truth untuk Stok)
      */
     public function receiveForm($id)
     {
-        $po = DB::table('purchase_orders')
-            ->join('suppliers', 'purchase_orders.supplier_id', '=', 'suppliers.id')
-            ->select('purchase_orders.*', 'suppliers.name as supplier_name', 'suppliers.code as supplier_code')
-            ->where('purchase_orders.id', $id)
-            ->first();
-
-        if (!$po) abort(404);
-
-        $items = DB::table('purchase_order_items')
-            ->join('obats', 'purchase_order_items.medicine_id', '=', 'obats.kode')
-            ->select('purchase_order_items.*', 'obats.nama as medicine_name')
-            ->where('purchase_order_items.purchase_order_id', $id)
-            ->get();
-
-        return Inertia::render('Purchases/PO/Receive', [
-            'po' => $po,
-            'items' => $items,
-        ]);
+        return redirect()->route('purchases.invoices.create', ['po_id' => $id])
+            ->with('info', 'Pendataan penerimaan barang fisik dan penambahan stok obat dilakukan melalui Faktur Pembelian.');
     }
 
     /**
-     * Goods Receipt Store (Atomic Inventory & Accounts Payable Posting)
+     * Goods Receipt Store - Dialihkan ke Faktur Pembelian Farmasi
      */
     public function receiveStore(Request $request, $id)
     {
-        $request->validate([
-            'supplier_invoice_number' => 'required|string',
-            'received_date' => 'required|date',
-            'items' => 'required|array|min:1',
-            'items.*.item_id' => 'required|exists:purchase_order_items,id',
-            'items.*.batch_number' => 'required|string',
-            'items.*.expired_date' => 'required|date',
-            'items.*.received_quantity' => 'required|integer|min:1',
-        ]);
-
-        DB::beginTransaction();
-        try {
-            $po = DB::table('purchase_orders')->where('id', $id)->first();
-            $userId = auth()->id();
-
-            $receiptNo = 'GR-' . date('Ymd') . '-' . rand(100, 999);
-            $receiptId = DB::table('purchase_receipts')->insertGetId([
-                'receipt_number' => $receiptNo,
-                'purchase_order_id' => $id,
-                'supplier_id' => $po->supplier_id,
-                'supplier_invoice_number' => $request->supplier_invoice_number,
-                'received_date' => $request->received_date,
-                'received_by' => $userId,
-                'notes' => $request->notes,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            $totalReceiptCost = 0;
-
-            foreach ($request->items as $itemData) {
-                $poItem = DB::table('purchase_order_items')->where('id', $itemData['item_id'])->first();
-                $conversionFactor = (float)($poItem->conversion_to_base ?? 1.0000);
-                $rxQtyTx = (int)$itemData['received_quantity'];
-                $baseQtyAdded = (int)ceil($rxQtyTx * $conversionFactor);
-
-                // 1. Insert Receipt Item Detail
-                DB::table('purchase_receipt_items')->insert([
-                    'purchase_receipt_id' => $receiptId,
-                    'medicine_id' => $poItem->medicine_id,
-                    'unit_id' => $poItem->unit_id ?? null,
-                    'unit_name' => $poItem->unit_name ?? null,
-                    'conversion_to_base' => $conversionFactor,
-                    'quantity_base' => $baseQtyAdded,
-                    'batch_number' => $itemData['batch_number'],
-                    'expired_date' => $itemData['expired_date'],
-                    'received_quantity' => $rxQtyTx,
-                    'unit_cost' => $poItem->unit_price,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // 2. Insert Batch in FEFO inventory (stored in base unit)
-                DB::table('medicine_batches')->insert([
-                    'medicine_id' => $poItem->medicine_id,
-                    'batch_number' => $itemData['batch_number'],
-                    'expired_date' => $itemData['expired_date'],
-                    'stock' => $baseQtyAdded,
-                    'buy_price' => $poItem->unit_price,
-                    'is_active' => true,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // 3. Increment Main Medicine Stock (in base unit)
-                $medBefore = DB::table('obats')->where('kode', $poItem->medicine_id)->value('stok') ?? 0;
-                DB::table('obats')->where('kode', $poItem->medicine_id)->increment('stok', $baseQtyAdded);
-
-                // 4. Create Stock Movement Log (recording transaction Qty & base unit conversion)
-                DB::table('stock_movements')->insert([
-                    'medicine_id' => $poItem->medicine_id,
-                    'batch_id' => null,
-                    'type' => 'in',
-                    'quantity' => $baseQtyAdded,
-                    'transaction_quantity' => $rxQtyTx,
-                    'unit_id' => $poItem->unit_id ?? null,
-                    'unit_name' => $poItem->unit_name ?? null,
-                    'conversion_to_base' => $conversionFactor,
-                    'stock_before' => $medBefore,
-                    'stock_after' => $medBefore + $baseQtyAdded,
-                    'reference_number' => $po->po_number,
-                    'user_id' => $userId,
-                    'notes' => "Penerimaan Barang PO ({$rxQtyTx} " . ($poItem->unit_name ?? 'Unit') . " = +{$baseQtyAdded} Base Stock, Inv: {$request->supplier_invoice_number})",
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // 5. Update PO Item Received & Outstanding Qty
-                $newReceived = $poItem->received_quantity + $itemData['received_quantity'];
-                $newOutstanding = max(0, $poItem->order_quantity - $newReceived);
-
-                DB::table('purchase_order_items')->where('id', $itemData['item_id'])->update([
-                    'received_quantity' => $newReceived,
-                    'outstanding_quantity' => $newOutstanding,
-                    'updated_at' => now(),
-                ]);
-
-                $totalReceiptCost += ($itemData['received_quantity'] * $poItem->unit_price);
-            }
-
-            // Check if all items received
-            $totalOutstanding = DB::table('purchase_order_items')->where('purchase_order_id', $id)->sum('outstanding_quantity');
-            $newPoStatus = $totalOutstanding <= 0 ? 'RECEIVED' : 'PARTIAL_RECEIVED';
-
-            DB::table('purchase_orders')->where('id', $id)->update([
-                'status' => $newPoStatus,
-                'updated_at' => now(),
-            ]);
-
-            // 6. Create Accounts Payable (Hutang Supplier) in Finance Module
-            $apNo = 'AP-' . date('Ymd') . '-' . rand(100, 999);
-            DB::table('accounts_payables')->insert([
-                'payable_number' => $apNo,
-                'purchase_id' => null,
-                'supplier_id' => $po->supplier_id,
-                'invoice_number' => $request->supplier_invoice_number,
-                'total_amount' => $totalReceiptCost,
-                'paid_amount' => 0,
-                'remaining_amount' => $totalReceiptCost,
-                'due_date' => $po->due_date ?? now()->addDays(30)->toDateString(),
-                'status' => 'unpaid',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            DB::commit();
-
-            return redirect()->route('purchases.po.index')->with('success', "Penerimaan Barang berhasil! Stok obat & Kewajiban Hutang Supplier telah diperbarui.");
-        } catch (Exception $e) {
-            DB::rollBack();
-            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
-        }
+        return redirect()->route('purchases.invoices.create', ['po_id' => $id])
+            ->with('info', 'Penerimaan barang fisik dan penambahan stok persediaan obat wajib diproses melalui modul Faktur Pembelian.');
     }
 
     /**
@@ -514,10 +315,18 @@ class PurchaseOrderController extends Controller
                 ->get();
         }
 
+        $invoices = DB::table('purchases')
+            ->leftJoin('users', 'purchases.user_id', '=', 'users.id')
+            ->select('purchases.*', 'users.name as creator_name')
+            ->where('purchases.purchase_order_id', $id)
+            ->orderBy('purchases.id', 'desc')
+            ->get();
+
         return Inertia::render('Purchases/PO/Show', [
             'po' => $po,
             'items' => $items,
             'receipts' => $receipts,
+            'invoices' => $invoices,
         ]);
     }
 

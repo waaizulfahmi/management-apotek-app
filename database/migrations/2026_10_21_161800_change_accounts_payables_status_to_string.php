@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if (Schema::hasTable('accounts_payables')) {
             DB::statement("ALTER TABLE accounts_payables MODIFY status VARCHAR(30) NOT NULL DEFAULT 'unpaid'");
         }
@@ -22,6 +26,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if (Schema::hasTable('accounts_payables')) {
             DB::statement("ALTER TABLE accounts_payables MODIFY status ENUM('unpaid','partial','paid','overdue') NOT NULL DEFAULT 'unpaid'");
         }
