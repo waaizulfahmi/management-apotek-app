@@ -163,17 +163,18 @@ const printStockCard = () => {
 const showStockCardModal = ref(false);
 const isStockCardLoading = ref(false);
 const stockCardData = ref(null);
-const stockCardModalOutlet = ref('');
+const selectedRowOutletName = ref('');
 const stockCardSearch = ref('');
 
-const openMedicineStockCard = async (medicineId, medicineName, outletIdOverride = null) => {
+const openMedicineStockCard = async (medicineId, medicineName, outletId = null, outletName = null) => {
     showStockCardModal.value = true;
     isStockCardLoading.value = true;
     stockCardData.value = null;
     stockCardSearch.value = '';
 
-    const targetOutlet = outletIdOverride !== null ? outletIdOverride : (filterForm.value.outlet_id || '');
-    stockCardModalOutlet.value = targetOutlet;
+    // Directly bind to the specific outlet of the clicked transaction row
+    const targetOutlet = outletId !== null && outletId !== '' ? outletId : (filterForm.value.outlet_id || '');
+    selectedRowOutletName.value = outletName || '';
 
     try {
         const res = await axios.get(route('inventory.movements.medicine-ledger'), {
@@ -187,6 +188,9 @@ const openMedicineStockCard = async (medicineId, medicineName, outletIdOverride 
         });
         if (res.data.success) {
             stockCardData.value = res.data;
+            if (res.data.outlet?.name) {
+                selectedRowOutletName.value = res.data.outlet.name;
+            }
         }
     } catch (err) {
         showError('Gagal!', 'Tidak dapat memuat histori mutasi kartu stok obat.');
@@ -194,11 +198,6 @@ const openMedicineStockCard = async (medicineId, medicineName, outletIdOverride 
     } finally {
         isStockCardLoading.value = false;
     }
-};
-
-const changeModalOutlet = (newOutletId) => {
-    if (!stockCardData.value?.medicine?.kode) return;
-    openMedicineStockCard(stockCardData.value.medicine.kode, stockCardData.value.medicine.nama, newOutletId);
 };
 
 const filteredModalLedger = computed(() => {
@@ -491,7 +490,7 @@ const printMedicineLedger = () => {
                                         <div 
                                             class="fw-bold text-dark text-hover-primary" 
                                             style="cursor: pointer;"
-                                            @click="openMedicineStockCard(m.medicine_id, m.medicine_name)"
+                                            @click="openMedicineStockCard(m.medicine_id, m.medicine_name, m.outlet_id, m.outlet_name)"
                                             title="Klik untuk melihat detail kartu stok"
                                         >
                                             {{ m.medicine_name }}
@@ -551,7 +550,7 @@ const printMedicineLedger = () => {
                                         <button 
                                             type="button" 
                                             class="btn btn-xs btn-sm btn-outline-primary fw-bold d-inline-flex align-items-center gap-1 shadow-xs"
-                                            @click="openMedicineStockCard(m.medicine_id, m.medicine_name)"
+                                            @click="openMedicineStockCard(m.medicine_id, m.medicine_name, m.outlet_id, m.outlet_name)"
                                             title="Lihat Detail Transaksi & Kartu Stok Obat"
                                         >
                                             <i class="bx bx-show fs-6"></i>
@@ -752,7 +751,9 @@ const printMedicineLedger = () => {
                             </div>
                             <div>
                                 <h5 class="modal-title fw-bold mb-0">Kartu Stok: {{ stockCardData?.medicine?.nama || 'Memuat Data...' }}</h5>
-                                <div class="small text-white-50" style="font-size: 0.78rem;">Rincian Lengkap Penambahan (+) dan Pengurangan (-) Stok Berdasarkan Filter Outlet</div>
+                                <div class="small text-white-50" style="font-size: 0.78rem;">
+                                    Apotek: <strong class="text-white">{{ stockCardData?.outlet?.name || selectedRowOutletName || 'Outlet Terpilih' }}</strong> — Rincian Penambahan (+) & Pengurangan (-)
+                                </div>
                             </div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
@@ -773,7 +774,7 @@ const printMedicineLedger = () => {
 
                         <!-- Loaded State -->
                         <div v-else-if="stockCardData">
-                            <!-- Outlet Switcher & Medicine Meta Card -->
+                            <!-- Outlet Badge & Medicine Meta Card -->
                             <div class="card border-0 shadow-xs p-3 mb-3 rounded-3 bg-white">
                                 <div class="row align-items-center g-3">
                                     <div class="col-md-7">
@@ -789,14 +790,12 @@ const printMedicineLedger = () => {
                                             Total Seluruh Apotek: <strong class="text-dark">{{ formatNumber(stockCardData.medicine.stok_master) }} {{ stockCardData.medicine.satuan }}</strong>
                                         </div>
                                     </div>
-                                    <div class="col-md-5">
-                                        <div class="d-flex align-items-center justify-content-md-end gap-2">
-                                            <label class="form-label fw-bold mb-0 text-nowrap small text-muted"><i class="bx bx-store me-1 text-primary"></i>Pilih Outlet:</label>
-                                            <select class="form-select form-select-sm shadow-xs border-primary border-opacity-50" style="max-width: 220px;" v-model="stockCardModalOutlet" @change="changeModalOutlet(stockCardModalOutlet)">
-                                                <option value="">Semua Outlet (Konsolidasi)</option>
-                                                <option v-for="ot in outlets" :key="ot.id" :value="ot.id">{{ ot.name }}</option>
-                                            </select>
-                                        </div>
+                                    <div class="col-md-5 text-md-end">
+                                        <div class="small text-muted mb-1 fw-bold">Apotek / Outlet:</div>
+                                        <span class="badge bg-primary text-white px-3 py-2 fs-6 shadow-xs">
+                                            <i class="bx bx-store me-1"></i>
+                                            {{ stockCardData.outlet?.name || selectedRowOutletName || 'Outlet Terpilih' }}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -829,7 +828,7 @@ const printMedicineLedger = () => {
                                         <span class="text-primary small fw-bold">Saldo Akhir Mutasi</span>
                                         <h4 class="fw-bold text-primary mb-0 mt-1">{{ formatNumber(stockCardData.summary.closing_stock) }}</h4>
                                         <small class="text-muted" style="font-size: 0.7rem;">
-                                            {{ stockCardData.outlet ? stockCardData.outlet.name : 'Seluruh Outlet' }}
+                                            {{ stockCardData.outlet?.name || selectedRowOutletName || 'Outlet Terpilih' }}
                                         </small>
                                     </div>
                                 </div>
@@ -923,7 +922,7 @@ const printMedicineLedger = () => {
 
                             <!-- Active Batches for Selected Outlet -->
                             <div v-if="stockCardData.batches && stockCardData.batches.length > 0" class="card border-0 shadow-xs p-3 bg-white mb-2 rounded-3">
-                                <h6 class="fw-bold text-dark mb-2"><i class="bx bx-barcode me-1 text-success"></i>Batch Aktif Tersedia ({{ stockCardData.outlet ? stockCardData.outlet.name : 'Seluruh Cabang' }})</h6>
+                                <h6 class="fw-bold text-dark mb-2"><i class="bx bx-barcode me-1 text-success"></i>Batch Aktif Tersedia ({{ stockCardData.outlet?.name || selectedRowOutletName || 'Outlet Terpilih' }})</h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-bordered align-middle mb-0">
                                         <thead class="table-light">
