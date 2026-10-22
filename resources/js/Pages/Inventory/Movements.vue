@@ -804,9 +804,9 @@ const printMedicineLedger = () => {
                             <div class="row g-3 mb-4">
                                 <div class="col-6 col-md-3">
                                     <div class="card border-0 shadow-xs p-3 rounded-3 text-center bg-white h-100">
-                                        <span class="text-muted small">Stok Awal Periode</span>
+                                        <span class="text-muted small">Stok Sebelum Mutasi</span>
                                         <h4 class="fw-bold text-secondary mb-0 mt-1">{{ formatNumber(stockCardData.summary.opening_stock) }}</h4>
-                                        <small class="text-muted" style="font-size: 0.7rem;">Saldo awal sebelum periode</small>
+                                        <small class="text-muted" style="font-size: 0.7rem;">Stok awal sebelum transaksi</small>
                                     </div>
                                 </div>
                                 <div class="col-6 col-md-3">
@@ -825,7 +825,7 @@ const printMedicineLedger = () => {
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <div class="card border-0 shadow-xs p-3 rounded-3 text-center bg-white h-100 border-start border-4 border-primary">
-                                        <span class="text-primary small fw-bold">Saldo Akhir Mutasi</span>
+                                        <span class="text-primary small fw-bold">Stok Sesudah Mutasi</span>
                                         <h4 class="fw-bold text-primary mb-0 mt-1">{{ formatNumber(stockCardData.summary.closing_stock) }}</h4>
                                         <small class="text-muted" style="font-size: 0.7rem;">
                                             {{ stockCardData.outlet?.name || selectedRowOutletName || 'Outlet Terpilih' }}
@@ -858,10 +858,10 @@ const printMedicineLedger = () => {
                                                 <th>Jenis Transaksi</th>
                                                 <th>No. Referensi</th>
                                                 <th>Batch & Exp</th>
-                                                <th>Outlet</th>
-                                                <th class="text-end text-success">Masuk (+)</th>
-                                                <th class="text-end text-danger">Keluar (-)</th>
-                                                <th class="text-end fw-bold">Saldo Berjalan</th>
+                                                <th class="text-end text-secondary fw-bold">Stok Sebelum</th>
+                                                <th class="text-end text-success fw-bold">Penambahan (+)</th>
+                                                <th class="text-end text-danger fw-bold">Pengurangan (-)</th>
+                                                <th class="text-end text-primary fw-bold">Stok Sesudah</th>
                                                 <th>Petugas & Keterangan</th>
                                             </tr>
                                         </thead>
@@ -884,25 +884,27 @@ const printMedicineLedger = () => {
                                                     <div><span class="badge bg-light text-dark border">{{ item.batch_number || '-' }}</span></div>
                                                     <small class="text-muted" v-if="item.expired_date">Exp: {{ item.expired_date }}</small>
                                                 </td>
-                                                <td class="small">
-                                                    <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-1 font-monospace">
-                                                        <i class="bx bx-store text-primary"></i>{{ item.outlet_name || 'Outlet Utama' }}
-                                                    </span>
+                                                <!-- Stok Sebelum -->
+                                                <td class="text-end fw-bold text-secondary font-monospace">
+                                                    {{ formatNumber(item.stock_before) }}
                                                 </td>
+                                                <!-- Penambahan (+) -->
                                                 <td class="text-end fw-bold">
                                                     <span v-if="item.type === 'in'" class="text-success font-monospace">
                                                         +{{ formatNumber(item.quantity) }}
                                                     </span>
                                                     <span v-else class="text-muted">—</span>
                                                 </td>
+                                                <!-- Pengurangan (-) -->
                                                 <td class="text-end fw-bold">
                                                     <span v-if="item.type === 'out'" class="text-danger font-monospace">
                                                         -{{ formatNumber(item.quantity) }}
                                                     </span>
                                                     <span v-else class="text-muted">—</span>
                                                 </td>
-                                                <td class="text-end fw-bold fs-6 font-monospace" :class="item.calculated_running_balance < 0 ? 'text-danger' : 'text-primary'">
-                                                    {{ formatNumber(item.calculated_running_balance) }}
+                                                <!-- Stok Sesudah -->
+                                                <td class="text-end fw-bold fs-6 font-monospace text-primary">
+                                                    {{ formatNumber(item.stock_after) }}
                                                 </td>
                                                 <td class="small">
                                                     <div class="fw-semibold text-dark">{{ item.user_name || 'System' }}</div>
@@ -992,10 +994,10 @@ const printMedicineLedger = () => {
                             <div><strong>Kategori:</strong> {{ stockCardData.medicine.kategori }}</div>
                         </div>
                         <div class="col-6 text-end">
-                            <div><strong>Stok Awal:</strong> {{ formatNumber(stockCardData.summary.opening_stock) }} {{ stockCardData.medicine.satuan }}</div>
+                            <div><strong>Stok Sebelum:</strong> {{ formatNumber(stockCardData.summary.opening_stock) }} {{ stockCardData.medicine.satuan }}</div>
                             <div><strong>Total Masuk (+):</strong> +{{ formatNumber(stockCardData.summary.total_in) }} {{ stockCardData.medicine.satuan }}</div>
                             <div><strong>Total Keluar (-):</strong> -{{ formatNumber(stockCardData.summary.total_out) }} {{ stockCardData.medicine.satuan }}</div>
-                            <div><strong>Saldo Akhir:</strong> <strong>{{ formatNumber(stockCardData.summary.closing_stock) }} {{ stockCardData.medicine.satuan }}</strong></div>
+                            <div><strong>Stok Sesudah:</strong> <strong>{{ formatNumber(stockCardData.summary.closing_stock) }} {{ stockCardData.medicine.satuan }}</strong></div>
                         </div>
                     </div>
                 </div>
@@ -1004,15 +1006,15 @@ const printMedicineLedger = () => {
                 <table class="table-bordered">
                     <thead class="table-light">
                         <tr>
-                            <th class="text-center" style="width: 30px;">No</th>
-                            <th style="width: 120px;">Tanggal & Jam</th>
-                            <th style="width: 90px;">Jenis</th>
-                            <th style="width: 130px;">No. Referensi</th>
-                            <th style="width: 110px;">Batch / Exp</th>
-                            <th style="width: 90px;">Outlet</th>
-                            <th class="text-end" style="width: 75px;">Masuk (+)</th>
-                            <th class="text-end" style="width: 75px;">Keluar (-)</th>
-                            <th class="text-end" style="width: 75px;">Saldo</th>
+                            <th class="text-center" style="width: 28px;">No</th>
+                            <th style="width: 110px;">Tanggal & Jam</th>
+                            <th style="width: 85px;">Jenis</th>
+                            <th style="width: 120px;">No. Referensi</th>
+                            <th style="width: 100px;">Batch / Exp</th>
+                            <th class="text-end" style="width: 75px;">Stok Sebelum</th>
+                            <th class="text-end" style="width: 70px;">Masuk (+)</th>
+                            <th class="text-end" style="width: 70px;">Keluar (-)</th>
+                            <th class="text-end" style="width: 75px;">Stok Sesudah</th>
                             <th>Keterangan / User</th>
                         </tr>
                     </thead>
@@ -1023,10 +1025,10 @@ const printMedicineLedger = () => {
                             <td>{{ getMovementLabel(item.movement_type) }}</td>
                             <td class="font-monospace fw-bold">{{ item.reference_number || item.movement_number }}</td>
                             <td>{{ item.batch_number || '-' }} <span v-if="item.expired_date">({{ item.expired_date }})</span></td>
-                            <td>{{ item.outlet_name || 'Utama' }}</td>
+                            <td class="text-end fw-bold">{{ formatNumber(item.stock_before) }}</td>
                             <td class="text-end fw-bold text-success">{{ item.type === 'in' ? '+' + formatNumber(item.quantity) : '-' }}</td>
                             <td class="text-end fw-bold text-danger">{{ item.type === 'out' ? '-' + formatNumber(item.quantity) : '-' }}</td>
-                            <td class="text-end fw-bold">{{ formatNumber(item.calculated_running_balance) }}</td>
+                            <td class="text-end fw-bold">{{ formatNumber(item.stock_after) }}</td>
                             <td>{{ item.notes || '-' }} ({{ item.user_name || 'System' }})</td>
                         </tr>
                     </tbody>

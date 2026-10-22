@@ -538,26 +538,16 @@ class StockMovementController extends Controller implements HasMiddleware
             $movementsQuery->whereBetween(DB::raw('DATE(stock_movements.created_at)'), [$startDate, $endDate]);
         }
 
-        $movements = $movementsQuery->orderBy('stock_movements.id', 'asc')->get();
-
-        // Calculate running balance chronologically
-        $runningBalance = $openingStock;
-        $ledger = $movements->map(function ($item) use (&$runningBalance) {
-            if ($item->type === 'in') {
-                $runningBalance += (float)$item->quantity;
-            } else {
-                $runningBalance -= (float)$item->quantity;
-            }
-            $item->calculated_running_balance = $runningBalance;
-            return $item;
-        });
-
-        // Reverse for display: newest first
-        $ledgerDesc = $ledger->reverse()->values();
+        $movements = $movementsQuery->orderBy('stock_movements.id', 'desc')->get();
 
         $totalIn = $movements->where('type', 'in')->sum('quantity');
         $totalOut = $movements->where('type', 'out')->sum('quantity');
-        $closingStock = $startDate ? ($openingStock + $totalIn - $totalOut) : ($totalIn - $totalOut);
+
+        $latestMovement = $movements->first();
+        $earliestMovement = $movements->last();
+
+        $stockBeforePeriod = $earliestMovement ? (float)$earliestMovement->stock_before : (float)$openingStock;
+        $stockAfterPeriod = $latestMovement ? (float)$latestMovement->stock_after : ($outletStock !== null ? (float)$outletStock : (float)$medicine->stok);
 
         // Active batches for this medicine
         $batches = collect();
@@ -589,14 +579,14 @@ class StockMovementController extends Controller implements HasMiddleware
             ],
             'outlet' => $outlet,
             'summary' => [
-                'opening_stock' => (float)$openingStock,
+                'opening_stock' => (float)$stockBeforePeriod,
                 'total_in' => (float)$totalIn,
                 'total_out' => (float)$totalOut,
-                'closing_stock' => (float)$closingStock,
+                'closing_stock' => (float)$stockAfterPeriod,
                 'current_stock' => $outletStock !== null ? (float)$outletStock : (float)$medicine->stok,
             ],
             'batches' => $batches,
-            'ledger' => $ledgerDesc,
+            'ledger' => $movements,
         ]);
     }
 }
