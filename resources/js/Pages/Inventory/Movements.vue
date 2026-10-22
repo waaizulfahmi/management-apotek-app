@@ -475,6 +475,7 @@ const printMedicineLedger = () => {
                                     <th class="text-end text-danger">Keluar (-)</th>
                                     <th class="text-end fw-bold">Saldo Base Stock</th>
                                     <th>User</th>
+                                    <th class="text-center" style="min-width: 90px;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -487,26 +488,15 @@ const printMedicineLedger = () => {
                                         </span>
                                     </td>
                                     <td>
-                                        <button 
-                                            type="button" 
-                                            class="btn btn-link text-decoration-none p-0 text-start fw-bold text-dark d-flex align-items-center gap-1 hover-primary"
+                                        <div 
+                                            class="fw-bold text-dark text-hover-primary" 
+                                            style="cursor: pointer;"
                                             @click="openMedicineStockCard(m.medicine_id, m.medicine_name)"
-                                            title="Klik untuk melihat detail kartu stok & mutasi obat"
+                                            title="Klik untuk melihat detail kartu stok"
                                         >
-                                            <span class="text-hover-primary">{{ m.medicine_name }}</span>
-                                            <i class="bx bx-show-alt text-primary fs-6" title="Lihat Kartu Stok"></i>
-                                        </button>
-                                        <div class="d-flex align-items-center gap-2 mt-1">
-                                            <small class="text-muted">{{ m.medicine_id }} | {{ m.medicine_category }}</small>
-                                            <span 
-                                                class="badge bg-primary-subtle text-primary border border-primary border-opacity-25" 
-                                                style="font-size: 0.68rem; cursor: pointer;" 
-                                                @click="openMedicineStockCard(m.medicine_id, m.medicine_name)"
-                                                title="Klik untuk membuka detail mutasi obat"
-                                            >
-                                                <i class="bx bx-history me-1"></i>Detail Stok
-                                            </span>
+                                            {{ m.medicine_name }}
                                         </div>
+                                        <small class="text-muted">{{ m.medicine_id }} | {{ m.medicine_category }}</small>
                                     </td>
                                     <td class="small">
                                         <div><span class="badge bg-light text-dark border">{{ m.batch_number || '-' }}</span></div>
@@ -557,9 +547,20 @@ const printMedicineLedger = () => {
                                         {{ formatNumber(m.stock_after) }}
                                     </td>
                                     <td class="small text-muted">{{ m.user_name }}</td>
+                                    <td class="text-center">
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-xs btn-sm btn-outline-primary fw-bold d-inline-flex align-items-center gap-1 shadow-xs"
+                                            @click="openMedicineStockCard(m.medicine_id, m.medicine_name)"
+                                            title="Lihat Detail Transaksi & Kartu Stok Obat"
+                                        >
+                                            <i class="bx bx-show fs-6"></i>
+                                            <span>Detail</span>
+                                        </button>
+                                    </td>
                                 </tr>
                                 <tr v-if="!movements.data || movements.data.length === 0">
-                                    <td colspan="11" class="text-center py-4 text-muted">Belum ada data pergerakan stok (Stock Movement) sesuai filter ini.</td>
+                                    <td colspan="12" class="text-center py-4 text-muted">Belum ada data pergerakan stok (Stock Movement) sesuai filter ini.</td>
                                 </tr>
                             </tbody>
                         </table>
